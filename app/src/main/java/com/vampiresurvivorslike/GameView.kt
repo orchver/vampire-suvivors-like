@@ -1,12 +1,15 @@
 package com.vampiresurvivorslike
 
+import kotlin.math.sqrt
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import kotlin.math.*
+import com.vampiresurvivorslike.input.Joystick
+import com.vampiresurvivorslike.player.Player
+import com.vampiresurvivorslike.weapons.*
 import kotlin.random.Random
 
 class GameView @JvmOverloads constructor(
@@ -14,479 +17,450 @@ class GameView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback, Runnable {
 
-    private var gameThread: Thread? = null
+    // 🔹 전체 게임 상태
+    private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP }
+    private var gameState = GameState.SELECT_WEAPON
+
+    // 🔹 레벨업 카드 타입
+    private enum class OptionType { ADD_WEAPON, UPGRADE_WEAPON }
+
+    // 🔹 레벨업 카드 데이터
+    private data class LevelUpOption(
+        val type: OptionType,
+        val weaponType: String,   // "sword" / "axe" / "bow" / "talisman"
+        val description: String
+    )
+
+    private var currentLevelUpOptions: List<LevelUpOption> = emptyList()
+
+    private lateinit var thread: Thread
     @Volatile private var running = false
 
-    // ---------- 画笔 ----------
-    private val playerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.CYAN }
-    private val enemyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFF5555.toInt() }
-    private val projPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFF55.toInt() }
-    private val gemPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF55FF88.toInt() }
-    private val textPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; textSize = 42f; typeface = Typeface.MONOSPACE
+    private val bg = Paint().apply { color = Color.BLACK }
+    private val hud = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 36f
     }
-    private val hudSmall   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xCCFFFFFF.toInt(); textSize = 28f; typeface = Typeface.MONOSPACE
-    }
-    private val joyBasePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33FFFFFF; style = Paint.Style.FILL }
-    private val joyStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFFFFF; style = Paint.Style.STROKE; strokeWidth = 3f }
-    private val joyKnobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xAAFFFFFF.toInt() }
-    private val btnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x44FFFFFF; style = Paint.Style.FILL }
-    private val btnStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xAAFFFFFF.toInt(); style = Paint.Style.STROKE; strokeWidth = 4f }
-    private val modalBg = Paint().apply { color = 0xCC000000.toInt() }
-    private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1F2A38.toInt() }
-    private val cardStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5E7EB.toInt(); style = Paint.Style.STROKE; strokeWidth = 3f }
-    private val cardText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 36f; typeface = Typeface.DEFAULT_BOLD }
 
-    // ---------- 玩家 ----------
-    private var px = 100f
-    private var py = 100f
-    private var vx = 0f
-    private var vy = 0f
-    private val playerRadius = 24f
+    private var player: Player? = null
+    private val enemies = mutableListOf<Enemy>()
+    private val weapons = mutableListOf<Weapon>()
 
-    private var hp = 15
-    private var maxHp = 15
+    private val joystick = Joystick()
+    private var lastFrameNs = 0L
+    private var lastSpawnMs = 0L
 
-    // ---------- 虚拟摇杆（左下固定） ----------
-    private var joyBaseCx = 0f
-    private var joyBaseCy = 0f
-    private val joyBaseRadius = 110f
-    private val joyKnobRadius = 38f
-    private val joyMargin = 28f
-    private var knobX = 0f
-    private var knobY = 0f
-    private var joyActive = false
-    private var activePointerId = -1
+    // 🔹 경험치 구슬
+    private val expOrbs = mutableListOf<ExpOrb>()
 
-    // 移动速度映射
-    private val maxSpeed = 7.0f
-    private val deadZone = 8f
+    // 🔹 초기 무기 선택 관련
+    private val availableTypes = listOf("sword", "axe", "bow", "talisman")
+    private var option1 = ""
+    private var option2 = ""
 
-    // ---------- 攻击按钮（右下） ----------
-    private var atkCx = 0f
-    private var atkCy = 0f
-    private val atkR = 96f
-    private var attackPressed = false
-    private var attackCooldownMs = 100L
-    private var lastAttackAt = 0L
-    private var projSpeed = 12f
-    private var projDamage = 10
-    private var projCount = 1
-
-    // ---------- 敌人与投射物 ----------
-    data class Enemy(var x: Float, var y: Float, var hp: Int, var speed: Float, val r: Float = 18f)
-    data class Proj(var x: Float, var y: Float, var vx: Float, var vy: Float, val r: Float = 6f, var dmg: Int = 10)
-    data class Gem(var x: Float, var y: Float, val r: Float = 10f, val xp: Int = 20)
-
-    private val enemies = ArrayList<Enemy>()
-    private val projs = ArrayList<Proj>()
-    private val gems = ArrayList<Gem>()
-    private var lastSpawnAt = 0L
-    private var spawnIntervalMs = 1500L
-    private var elapsedMs = 0L
-
-    // ---------- 经验与升级 ----------
-    private var xp = 0
-    private var xpToNext = 200
-    private var level = 1
-
-    private var modalVisible = false
-    private val upgradePool = listOf(
-        "最大生命 +25" to { maxHp += 25; hp = min(hp + (0.75f * 25).toInt(), maxHp) },
-        "投射物伤害 +5" to { projDamage += 5 },
-        "攻击冷却 -10%" to { attackCooldownMs = (attackCooldownMs * 0.9).toLong().coerceAtLeast(120L) },
-        "移动速度 +15%" to { /* 提升 maxSpeed 等效：用速度系数 */ speedScale *= 1.15f },
-        "投射物数量 +1" to { projCount = (projCount + 1).coerceAtMost(5) },
-        "投射物速度 +20%" to { projSpeed *= 1.2f }
-    )
-    private var speedScale = 1f
-    private data class Card(val rect: RectF, val title: String, val apply: () -> Unit)
-    private var cards: List<Card> = emptyList()
+    // 🔹 한 번에 여러 레벨업이 발생할 수 있으므로 큐로 관리
+    private var levelUpQueue = 0
 
     init {
         holder.addCallback(this)
         isFocusable = true
-        keepScreenOn = true
     }
 
-    // 尺寸到位后，定位摇杆与按钮
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        joyBaseCx = joyMargin + joyBaseRadius
-        joyBaseCy = h - joyMargin - joyBaseRadius
-        knobX = joyBaseCx
-        knobY = joyBaseCy
-
-        atkCx = w - (joyMargin + atkR)
-        atkCy = h - (joyMargin + atkR)
-
-        if (px == 100f && py == 100f) { px = w * 0.5f; py = h * 0.5f }
-    }
-
-    // ---------- 生命周期 ----------
     override fun surfaceCreated(holder: SurfaceHolder) {
         running = true
-        gameThread = Thread(this, "GameLoop").also { it.start() }
-    }
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-        running = false
-        gameThread?.joinSafely()
-    }
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+        thread = Thread(this).also { it.start() }
+        lastFrameNs = System.nanoTime()
 
-    // ---------- 循环 ----------
+        // 무기 두 가지를 랜덤으로 뽑아서 선택 화면에 표시
+        val shuffled = availableTypes.shuffled()
+        option1 = shuffled[0]
+        option2 = shuffled[1]
+        gameState = GameState.SELECT_WEAPON
+
+        joystick.ensureBase(width, height)
+    }
+
     override fun run() {
-        var last = System.nanoTime()
         while (running) {
             val now = System.nanoTime()
-            val dtMs = ((now - last) / 1_000_000).coerceAtLeast(0L)
-            last = now
-
-            if (!modalVisible) {
-                elapsedMs += dtMs
-                update(dtMs)
-            }
+            val dtSec = ((now - lastFrameNs).coerceAtMost(100_000_000L)) / 1_000_000_000f
+            lastFrameNs = now
+            update(dtSec)
             drawFrame()
-
-            val ms = (System.nanoTime() - now) / 1_000_000
-            val sleep = (16 - ms).coerceAtLeast(0L)
-            if (sleep > 0) Thread.sleep(sleep)
         }
     }
 
-    // ---------- 触控 ----------
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (modalVisible) {
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                val x = event.x; val y = event.y
-                cards.firstOrNull { it.rect.contains(x, y) }?.let { card ->
-                    card.apply.invoke()
-                    modalVisible = false
+    private fun update(dtSec: Float) {
+        when (gameState) {
+            GameState.SELECT_WEAPON -> {
+                // 무기 선택 화면에서는 게임 로직 없음
+            }
+
+            GameState.PLAYING -> {
+                val p = player ?: return
+
+                // 플레이어 이동
+                p.updateByJoystick(joystick.axisX, joystick.axisY, dtSec, width, height)
+
+                // 적 이동
+                for (e in enemies) {
+                    e.update(p.x, p.y)
+                }
+
+                val nowMs = System.currentTimeMillis()
+
+                // 무기 업데이트 (데미지만 넣고, 적 제거/경험치는 여기서 하지 않음)
+                for (w in weapons) {
+                    w.update(p, enemies, nowMs)
+                }
+
+                // 1) 죽은 적 → 경험치 구슬 생성 + 적 제거
+                val itE = enemies.iterator()
+                while (itE.hasNext()) {
+                    val e = itE.next()
+                    if (e.isDead) {
+                        expOrbs += ExpOrb(e.x, e.y, e.expReward)
+                        itE.remove()
+                    }
+                }
+                // 경험치 구술 자석
+                val magnetRadius = 3000f
+                val magnetSpeed = 500f
+
+                for (orb in expOrbs) {
+                    val dx = p.x - orb.x
+                    val dy = p.y - orb.y
+                    val dist2 = dx * dx + dy * dy
+                    if (dist2 <= magnetRadius * magnetRadius) {
+                        val dist = sqrt(dist2.toDouble()).toFloat().coerceAtLeast(1e-3f)
+                        val vx = dx / dist * magnetSpeed
+                        val vy = dy / dist * magnetSpeed
+                        orb.x += vx * dtSec
+                        orb.y += vy * dtSec
+                    }
+                }
+
+                // 2) 플레이어가 경험치 구슬을 먹었는지 체크
+                val itO = expOrbs.iterator()
+                while (itO.hasNext()) {
+                    val orb = itO.next()
+                    if (orb.isCollected(p.x, p.y, p.radius)) {
+                        p.gainExp(orb.value)   // 여기서 레벨업 발생 가능 (onLevelUp 콜백 호출)
+                        itO.remove()
+                    }
+                }
+
+                // 3) 적 스폰
+                if (nowMs - lastSpawnMs >= 2000L && enemies.size < 25) {
+                    spawnEnemies(3)
+                    lastSpawnMs = nowMs
                 }
             }
-            return true
-        }
 
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                val x = event.x; val y = event.y
-                if (isInAttackButton(x, y)) { attackPressed = true; tryAttack() }
-                else if (x <= width * 0.5f) startJoystick(event, 0)
-            }
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                val idx = event.actionIndex
-                val x = event.getX(idx); val y = event.getY(idx)
-                if (isInAttackButton(x, y)) { attackPressed = true; tryAttack() }
-                else if (!joyActive && x <= width * 0.5f) startJoystick(event, idx)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (joyActive) {
-                    val idx = event.findPointerIndex(activePointerId)
-                    if (idx >= 0) updateJoystick(event.getX(idx), event.getY(idx))
-                }
-            }
-            MotionEvent.ACTION_POINTER_UP -> {
-                val pointerId = event.getPointerId(event.actionIndex)
-                if (joyActive && pointerId == activePointerId) stopJoystick()
-                val x = event.getX(event.actionIndex); val y = event.getY(event.actionIndex)
-                if (isInAttackButton(x, y)) attackPressed = false
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (joyActive) stopJoystick()
-                attackPressed = false
+            GameState.LEVEL_UP -> {
+                // 레벨업 선택 화면에서는 게임이 일시정지된 상태
             }
         }
-        return true
     }
 
-    private fun isInAttackButton(x: Float, y: Float): Boolean {
-        return hypot(x - atkCx, y - atkCy) <= atkR
-    }
-
-    private fun startJoystick(event: MotionEvent, index: Int) {
-        activePointerId = event.getPointerId(index)
-        joyActive = true
-        updateJoystick(event.getX(index), event.getY(index))
-    }
-
-    private fun updateJoystick(x: Float, y: Float) {
-        val dx = x - joyBaseCx
-        val dy = y - joyBaseCy
-        val len = hypot(dx, dy)
-        if (len <= joyBaseRadius) {
-            knobX = x; knobY = y
-        } else {
-            val k = joyBaseRadius / (if (len == 0f) 1f else len)
-            knobX = joyBaseCx + dx * k
-            knobY = joyBaseCy + dy * k
-        }
-        val ndx = knobX - joyBaseCx
-        val ndy = knobY - joyBaseCy
-        val r = hypot(ndx, ndy)
-        if (r <= deadZone) {
-            vx = 0f; vy = 0f
-        } else {
-            val norm = r / joyBaseRadius
-            val speed = (norm * (maxSpeed * speedScale)).toFloat()
-            val nx = ndx / (if (r == 0f) 1f else r)
-            val ny = ndy / (if (r == 0f) 1f else r)
-            vx = nx * speed
-            vy = ny * speed
-        }
-    }
-
-    private fun stopJoystick() {
-        joyActive = false
-        activePointerId = -1
-        knobX = joyBaseCx; knobY = joyBaseCy
-        vx = 0f; vy = 0f
-    }
-
-    // ---------- Update ----------
-    private fun update(dtMs: Long) {
-        // 移动
-        px += vx
-        py += vy
-        px = px.coerceIn(playerRadius, (width - playerRadius).coerceAtLeast(playerRadius))
-        py = py.coerceIn(playerRadius, (height - playerRadius).coerceAtLeast(playerRadius))
-
-        // 持续按住攻击按钮则自动连射
-        if (attackPressed) tryAttack()
-
-        // 敌人刷怪
-        if (elapsedMs - lastSpawnAt >= spawnIntervalMs) {
-            spawnEnemy()
-            lastSpawnAt = elapsedMs
-            // 逐渐加快
-            spawnIntervalMs = (spawnIntervalMs * 0.98).toLong().coerceAtLeast(500L)
-        }
-
-        // 敌人AI：朝玩家移动
-        enemies.forEach {
-            val dx = px - it.x
-            val dy = py - it.y
-            val d = hypot(dx, dy).coerceAtLeast(1f)
-            it.x += (dx / d) * it.speed
-            it.y += (dy / d) * it.speed
-        }
-
-        // 投射物移动
-        val itProj = projs.iterator()
-        while (itProj.hasNext()) {
-            val p = itProj.next()
-            p.x += p.vx; p.y += p.vy
-            // 出界移除
-            if (p.x < -20 || p.x > width + 20 || p.y < -20 || p.y > height + 20) {
-                itProj.remove(); continue
-            }
-            // 碰撞敌人
-            var hit = false
-            for (e in enemies) {
-                if (dist2(p.x, p.y, e.x, e.y) <= (p.r + e.r) * (p.r + e.r)) {
-                    e.hp -= p.dmg
-                    hit = true
-                    break
-                }
-            }
-            if (hit) itProj.remove()
-        }
-
-        // 敌人死亡 -> 掉宝石
-        val itEnemy = enemies.iterator()
-        while (itEnemy.hasNext()) {
-            val e = itEnemy.next()
-            if (e.hp <= 0) {
-                itEnemy.remove()
-                gems += Gem(e.x, e.y)
-            }
-        }
-
-        // 玩家与敌人碰撞受伤
-        for (e in enemies) {
-            if (dist2(px, py, e.x, e.y) <= (playerRadius + e.r) * (playerRadius + e.r)) {
-                // 简单CD：每次撞到扣血并把敌人轻推开
-                hp -= 1
-                val dx = e.x - px; val dy = e.y - py
-                val d = hypot(dx, dy).coerceAtLeast(1f)
-                e.x += (dx / d) * 10f
-                e.y += (dy / d) * 10f
-            }
-        }
-        hp = hp.coerceIn(0, maxHp)
-
-        // 吸附宝石：靠近则拾取
-        val itGem = gems.iterator()
-        while (itGem.hasNext()) {
-            val g = itGem.next()
-            val d2 = dist2(px, py, g.x, g.y)
-            if (d2 <= (playerRadius + 18f) * (playerRadius + 18f)) {
-                xp += g.xp
-                itGem.remove()
-            } else if (d2 <= 180f * 180f) {
-                // 临近自动吸附
-                val dx = px - g.x; val dy = py - g.y
-                val d = sqrt(d2).coerceAtLeast(1f)
-                g.x += (dx / d) * 6f
-                g.y += (dy / d) * 6f
-            }
-        }
-
-        // 升级
-        while (xp >= xpToNext) {
-            xp -= xpToNext
-            level += 1
-            maxHp += 25
-            // 回复75%缺失生命
-            val missing = maxHp - hp
-            hp = (hp + (missing * 0.75f)).toInt().coerceAtMost(maxHp)
-            xpToNext *= 2
-            showLevelUpModal()
-            break
-        }
-    }
-
-    private fun tryAttack() {
-        val now = System.currentTimeMillis()
-        if (now - lastAttackAt < attackCooldownMs) return
-        lastAttackAt = now
-        shootProjectiles(projCount)
-    }
-
-    private fun shootProjectiles(count: Int) {
-        // 方向：朝最近敌人；若没有敌人则朝玩家面前
-        val dir = findShootDirection()
-        val (dx, dy) = dir
-        // 多发散射
-        val spreadRad = 12 * PI / 180.0
-        val baseAng = atan2(dy.toDouble(), dx.toDouble())
-        val start = -((count - 1) / 2.0)
-        for (i in 0 until count) {
-            val ang = baseAng + (start + i) * spreadRad
-            val vx = (cos(ang) * projSpeed).toFloat()
-            val vy = (sin(ang) * projSpeed).toFloat()
-            projs += Proj(px, py, vx, vy, dmg = projDamage)
-        }
-    }
-
-    private fun findShootDirection(): Pair<Float, Float> {
-        if (enemies.isEmpty()) return 1f to 0f
-        var best: Enemy? = null
-        var bestD2 = Float.MAX_VALUE
-        for (e in enemies) {
-            val d2 = dist2(px, py, e.x, e.y)
-            if (d2 < bestD2) { bestD2 = d2; best = e }
-        }
-        val e = best!!
-        val dx = e.x - px; val dy = e.y - py
-        val d = hypot(dx, dy).coerceAtLeast(1f)
-        return (dx / d) to (dy / d)
-    }
-
-    private fun spawnEnemy() {
-        // 从屏幕边缘外生成
-        val side = Random.nextInt(4)
-        val margin = 40
-        val x = when (side) {
-            0 -> -margin.toFloat()
-            1 -> (width + margin).toFloat()
-            else -> Random.nextInt(width).toFloat()
-        }
-        val y = when (side) {
-            2 -> -margin.toFloat()
-            3 -> (height + margin).toFloat()
-            else -> Random.nextInt(height).toFloat()
-        }
-        val hp = 20 + level * 2
-        val speed = 1.4f + min(level, 30) * 0.03f
-        enemies += Enemy(x, y, hp, speed)
-    }
-
-    // ---------- 升级弹窗 ----------
-    private fun showLevelUpModal() {
-        // 随机抽三张卡（不重复）
-        val indices = upgradePool.indices.shuffled().take(3)
-        val titles = indices.map { upgradePool[it].first }
-        val apply = indices.map { upgradePool[it].second }
-
-        val w = width.toFloat(); val h = height.toFloat()
-        val cardW = w * 0.78f
-        val cardH = 160f
-        val gap   = 28f
-        val startY = h * 0.28f
-
-        cards = List(3) { i ->
-            val top = startY + i * (cardH + gap)
-            val rect = RectF((w - cardW) / 2f, top, (w + cardW) / 2f, top + cardH)
-            Card(rect, titles[i], apply[i])
-        }
-        modalVisible = true
-    }
-
-    // ---------- Render ----------
     private fun drawFrame() {
         val c = holder.lockCanvas() ?: return
         try {
-            c.drawColor(Color.BLACK)
-
-            // 宝石
-            gems.forEach { c.drawCircle(it.x, it.y, it.r, gemPaint) }
-
-            // 敌人
-            enemies.forEach { c.drawCircle(it.x, it.y, it.r, enemyPaint) }
-
-            // 投射物
-            projs.forEach { c.drawCircle(it.x, it.y, it.r, projPaint) }
-
-            // 玩家
-            c.drawCircle(px, py, playerRadius, playerPaint)
-
-            // HUD
-            c.drawText("HP $hp/$maxHp  LV $level  EXP $xp/$xpToNext", 24f, 60f, textPaint)
-
-            // 左下摇杆
-            c.drawCircle(joyBaseCx, joyBaseCy, joyBaseRadius, joyBasePaint)
-            c.drawCircle(joyBaseCx, joyBaseCy, joyBaseRadius, joyStrokePaint)
-            c.drawCircle(knobX, knobY, joyKnobRadius, joyKnobPaint)
-
-            // 右下攻击按钮 + 冷却扇形
-            c.drawCircle(atkCx, atkCy, atkR, btnPaint)
-            c.drawCircle(atkCx, atkCy, atkR, btnStroke)
-            // 冷却提示
-            val cd = (System.currentTimeMillis() - lastAttackAt).coerceAtLeast(0L)
-            val ratio = (cd.toFloat() / attackCooldownMs).coerceIn(0f, 1f)
-            val rect = RectF(atkCx - atkR, atkCy - atkR, atkCx + atkR, atkCy + atkR)
-            val sweep = 360f * ratio
-            val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF; style = Paint.Style.FILL }
-            c.drawArc(rect, -90f, sweep, true, arcPaint)
-            val label = if (ratio >= 1f) "ATTACK" else "RECHARGE"
-            val tw = hudSmall.measureText(label)
-            c.drawText(label, atkCx - tw / 2f, atkCy + 10f, hudSmall)
-
-            // 升级弹窗
-            if (modalVisible) {
-                c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), modalBg)
-                val title = "Level Up! 选择一项升级"
-                val tW = textPaint.measureText(title)
-                c.drawText(title, (width - tW) / 2f, height * 0.22f, textPaint)
-
-                cards.forEach { card ->
-                    c.drawRoundRect(card.rect, 16f, 16f, cardPaint)
-                    c.drawRoundRect(card.rect, 16f, 16f, cardStroke)
-                    val tw2 = cardText.measureText(card.title)
-                    c.drawText(card.title, card.rect.centerX() - tw2 / 2f, card.rect.centerY() + 12f, cardText)
-                }
+            c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bg)
+            when (gameState) {
+                GameState.SELECT_WEAPON -> drawWeaponSelectScreen(c)
+                GameState.PLAYING      -> drawGamePlay(c)
+                GameState.LEVEL_UP     -> drawLevelUpScreen(c)
             }
         } finally {
             holder.unlockCanvasAndPost(c)
         }
     }
 
-    // ---------- Utils ----------
-    private fun Thread?.joinSafely() {
-        try { this?.join(300) } catch (_: InterruptedException) {}
+    /** 🔹 초기 무기 선택 화면 */
+    private fun drawWeaponSelectScreen(c: Canvas) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 60f
+            textAlign = Paint.Align.CENTER
+        }
+
+        c.drawText("무기를 선택하세요", width / 2f, height / 4f, paint)
+
+        val rectPaint = Paint().apply { color = Color.DKGRAY }
+        val optionW = width / 3f
+        val optionH = 180f
+
+        val leftRect = RectF(width / 6f, height / 2f, width / 6f + optionW, height / 2f + optionH)
+        val rightRect = RectF(
+            width / 2f + width / 12f,
+            height / 2f,
+            width / 2f + width / 12f + optionW,
+            height / 2f + optionH
+        )
+
+        c.drawRoundRect(leftRect, 40f, 40f, rectPaint)
+        c.drawRoundRect(rightRect, 40f, 40f, rectPaint)
+
+        paint.textSize = 50f
+        c.drawText(option1.uppercase(), leftRect.centerX(), leftRect.centerY() + 20f, paint)
+        c.drawText(option2.uppercase(), rightRect.centerX(), rightRect.centerY() + 20f, paint)
     }
-    private fun dist2(x1: Float, y1: Float, x2: Float, y2: Float): Float {
-        val dx = x1 - x2; val dy = y1 - y2; return dx*dx + dy*dy
+
+    /** 🔹 실제 플레이 화면 그리기 */
+    private fun drawGamePlay(c: Canvas) {
+        val p = player
+
+        enemies.forEach { it.draw(c) }
+        expOrbs.forEach { it.draw(c) }
+
+        if (p != null) {
+            p.draw(c)
+            weapons.forEach { it.draw(c, p.x, p.y) }
+
+            // HUD
+            c.drawText("ENEMY: ${enemies.size}", 24f, 48f, hud)
+            c.drawText("LV ${p.level}  EXP ${p.exp}/${p.expToNext}", 24f, 96f, hud)
+            c.drawText("HP ${p.hp.toInt()} / ${p.maxHp.toInt()}", 24f, 144f, hud)
+        }
+
+        joystick.draw(c)
     }
+
+    /** 🔹 레벨업 카드 화면 (무기 추가 / 무기 강화 3개 중 택1) */
+    private fun drawLevelUpScreen(c: Canvas) {
+        // 현재 게임 화면 위에 반투명 오버레이
+        drawGamePlay(c)
+
+        val overlay = Paint().apply { color = Color.argb(180, 0, 0, 0) }
+        c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlay)
+
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 64f
+            textAlign = Paint.Align.CENTER
+        }
+        c.drawText("LEVEL UP!", width / 2f, height / 4f, titlePaint)
+
+        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.DKGRAY
+            style = Paint.Style.FILL
+        }
+        val cardText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 40f
+            textAlign = Paint.Align.CENTER
+        }
+
+        val cardWidth = width / 4f
+        val cardHeight = 220f
+        val top = height / 2f - cardHeight / 2f
+
+        val spacing = width / 12f
+        val totalWidth = cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
+        val leftStart = (width - totalWidth) / 2f
+
+        for (i in currentLevelUpOptions.indices) {
+            val left = leftStart + i * (cardWidth + spacing)
+            val rect = RectF(left, top, left + cardWidth, top + cardHeight)
+
+            c.drawRoundRect(rect, 30f, 30f, cardPaint)
+            c.drawText(currentLevelUpOptions[i].description, rect.centerX(), rect.centerY(), cardText)
+        }
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (gameState) {
+            GameState.SELECT_WEAPON -> {
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    val x = event.x
+                    val y = event.y
+                    val leftRange = width / 6f..(width / 6f + width / 3f)
+                    val rightRange = (width / 2f + width / 12f)..(width / 2f + width / 12f + width / 3f)
+
+                    if (y in (height / 2f)..(height / 2f + 180f)) {
+                        if (x in leftRange) chooseWeapon(option1)
+                        else if (x in rightRange) chooseWeapon(option2)
+                    }
+                }
+                return true
+            }
+
+            GameState.PLAYING -> {
+                val handled = joystick.onTouchEvent(event)
+                if (handled) performClick()
+                return handled || super.onTouchEvent(event)
+            }
+
+            GameState.LEVEL_UP -> {
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    handleLevelUpTouch(event.x, event.y)
+                }
+                return true
+            }
+        }
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
+    /** 🔹 레벨업 카드 터치 처리 */
+    private fun handleLevelUpTouch(x: Float, y: Float) {
+        if (currentLevelUpOptions.isEmpty()) return
+
+        val cardWidth = width / 4f
+        val cardHeight = 220f
+        val top = height / 2f - cardHeight / 2f
+
+        val spacing = width / 12f
+        val totalWidth = cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
+        val leftStart = (width - totalWidth) / 2f
+
+        for (i in currentLevelUpOptions.indices) {
+            val left = leftStart + i * (cardWidth + spacing)
+            val rect = RectF(left, top, left + cardWidth, top + cardHeight)
+            if (x in rect.left..rect.right && y in rect.top..rect.bottom) {
+                applyLevelUpChoice(i)
+                break
+            }
+        }
+    }
+
+    /** 🔹 선택한 업그레이드 옵션 적용 (새 무기 추가 또는 기존 무기 강화) */
+    private fun applyLevelUpChoice(index: Int) {
+        if (index !in currentLevelUpOptions.indices) return
+        val option = currentLevelUpOptions[index]
+
+        when (option.type) {
+            OptionType.ADD_WEAPON -> {
+                // 새 무기 생성 후 리스트에 추가
+                val newWeapon = WeaponFactory.createWeapon(option.weaponType)
+                weapons.add(newWeapon)
+            }
+            OptionType.UPGRADE_WEAPON -> {
+                // 해당 타입의 무기를 찾아서 upgrade()
+                val w = weapons.firstOrNull { weaponTypeOf(it) == option.weaponType }
+                w?.upgrade()
+            }
+        }
+
+        // 큐 처리
+        levelUpQueue--
+        if (levelUpQueue > 0) {
+            // 아직 처리해야 할 레벨업이 남았으면 새로운 옵션 세트 생성
+            prepareLevelUpOptions()
+            gameState = GameState.LEVEL_UP
+        } else {
+            levelUpQueue = 0
+            gameState = GameState.PLAYING
+        }
+    }
+
+    /** 🔹 무기 선택 후 플레이어 생성 및 게임 시작 */
+    private fun chooseWeapon(type: String) {
+        val w = WeaponFactory.createWeapon(type)
+        val p = Player(w)
+        p.x = width / 2f
+        p.y = height / 2f
+
+        // 레벨업 발생 시 콜백 연결
+        p.onLevelUp = {
+            levelUpQueue++
+            if (gameState != GameState.LEVEL_UP) {
+                prepareLevelUpOptions()
+                gameState = GameState.LEVEL_UP
+            }
+        }
+
+        player = p
+        weapons.clear()
+        weapons.add(w)
+        enemies.clear()
+        expOrbs.clear()
+        spawnEnemies(5)
+        gameState = GameState.PLAYING
+        lastSpawnMs = System.currentTimeMillis()
+    }
+
+    /** 🔹 현재 상태(보유 무기)에 따라 레벨업 옵션 3개 생성
+     *  - 아직 없는 무기 → ADD_WEAPON
+     *  - 가진 무기 중 레벨 < 3 → UPGRADE_WEAPON
+     *  최대 3개 랜덤
+     */
+    private fun prepareLevelUpOptions() {
+        val p = player ?: return
+
+        val ownedTypes = weapons.map { weaponTypeOf(it) }.distinct()
+        val addableTypes = availableTypes.filter { it !in ownedTypes }
+        val upgradableWeapons = weapons.filter { it.level < 3 }
+
+        val pool = mutableListOf<LevelUpOption>()
+
+        // 새 무기 추가 후보
+        for (t in addableTypes) {
+            pool += LevelUpOption(
+                type = OptionType.ADD_WEAPON,
+                weaponType = t,
+                description = "새 무기 획득: ${typeDisplayName(t)}"
+            )
+        }
+
+        // 기존 무기 강화 후보
+        for (w in upgradableWeapons) {
+            val t = weaponTypeOf(w)
+            val nextLv = w.level + 1
+            pool += LevelUpOption(
+                type = OptionType.UPGRADE_WEAPON,
+                weaponType = t,
+                description = "무기 강화 Lv.$nextLv: ${typeDisplayName(t)}"
+            )
+        }
+
+        if (pool.isEmpty()) {
+            // 더 이상 줄 업그레이드가 없으면 그냥 플레이 계속
+            currentLevelUpOptions = emptyList()
+            gameState = GameState.PLAYING
+            levelUpQueue = 0
+            return
+        }
+
+        pool.shuffle()
+        currentLevelUpOptions = pool.take(3)
+    }
+
+    /** 🔹 무기 인스턴스 → 타입 문자열 */
+    private fun weaponTypeOf(w: Weapon): String = when (w) {
+        is Sword    -> "sword"
+        is Axe      -> "axe"
+        is Bow      -> "bow"
+        is Talisman -> "talisman"
+        else        -> "sword"
+    }
+
+    /** 🔹 UI용 무기 이름 (한글) */
+    private fun typeDisplayName(type: String): String = when (type.lowercase()) {
+        "sword"    -> "검"
+        "axe"      -> "도끼"
+        "bow"      -> "활"
+        "talisman" -> "부적"
+        else       -> type
+    }
+
+    /** 🔹 적 스폰 (나중에 여기서 expReward / hp / speed 다르게 해서 몬스터 종류 늘리면 됨) */
+    private fun spawnEnemies(count: Int) {
+        if (width == 0 || height == 0) return
+        repeat(count) {
+            when (Random.nextInt(4)) {
+                0 -> enemies += Enemy(-30f, Random.nextFloat() * height)
+                1 -> enemies += Enemy(width + 30f, Random.nextFloat() * height)
+                2 -> enemies += Enemy(Random.nextFloat() * width, -30f)
+                else -> enemies += Enemy(Random.nextFloat() * width, height + 30f)
+            }
+        }
+    }
+
+    override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hgt: Int) {}
+    override fun surfaceDestroyed(h: SurfaceHolder) { running = false }
 }
