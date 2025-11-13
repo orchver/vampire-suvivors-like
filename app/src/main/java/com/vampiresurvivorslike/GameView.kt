@@ -7,6 +7,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import com.vampiresurvivorslike.enemy.EnemyManager
 import com.vampiresurvivorslike.input.Joystick
 import com.vampiresurvivorslike.player.Player
 import com.vampiresurvivorslike.weapons.*
@@ -41,6 +42,7 @@ class GameView @JvmOverloads constructor(
         color = Color.WHITE
         textSize = 36f
     }
+    private val enemyManager = EnemyManager()
 
     private var player: Player? = null
     private val enemies = mutableListOf<Enemy>()
@@ -106,6 +108,8 @@ class GameView @JvmOverloads constructor(
                 for (e in enemies) {
                     e.update(p.x, p.y)
                 }
+                //EnemyManager에 위치 넘김. 위의 코드 등은 충돌 우려로 일단 냅둠
+                enemyManager.updateAll(dtSec, p.x, p.y)
 
                 val nowMs = System.currentTimeMillis()
 
