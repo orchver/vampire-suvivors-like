@@ -17,6 +17,47 @@ class GameView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback, Runnable {
 
+    // 🔹 타이머 & 경험치 바
+    private var gameStartMs: Long = 0L          // 게임 시작시간
+    private var elapsedMs: Long = 0L           // 게임 지난시간
+    private val maxTimeMs = 8 * 60 * 1000L     // 8분
+
+    // (GameView 자체에서 쓰는 exp 변수는 안 써도 됨. Player 안의 exp 사용)
+    private var exp: Int = 0                   // 경험치(여유분)
+    private var expToLevel: Int = 200          // 업그레이드에 필요한 경험치(여유분)
+
+    // 🔹 HUD용 페인트들
+    private val timerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 48f
+        textAlign = Paint.Align.CENTER
+    }
+    private val barBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.DKGRAY
+        style = Paint.Style.FILL
+    }
+    private val hpBarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.RED
+        style = Paint.Style.FILL
+    }
+    private val expBarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.GREEN
+        style = Paint.Style.FILL
+    }
+    private val weaponTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 32f
+    }
+    private val circleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.FILL
+    }
+    private val circleEmptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.GRAY
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+    }
+
     // 🔹 전체 게임 상태
     private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP }
     private var gameState = GameState.SELECT_WEAPON
@@ -53,6 +94,29 @@ class GameView @JvmOverloads constructor(
     // 🔹 경험치 구슬
     private val expOrbs = mutableListOf<ExpOrb>()
 
+    // 🔹 ExpOrb 정의
+    private data class ExpOrb(
+        var x: Float,
+        var y: Float,
+        val value: Int,
+        val radius: Float = 10f
+    ) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.GREEN
+        }
+
+        fun draw(c: Canvas) {
+            c.drawCircle(x, y, radius, paint)
+        }
+
+        fun isCollected(px: Float, py: Float, pr: Float): Boolean {
+            val dx = px - x
+            val dy = py - y
+            val r = radius + pr
+            return dx * dx + dy * dy <= r * r
+        }
+    }
+
     // 🔹 초기 무기 선택 관련
     private val availableTypes = listOf("sword", "axe", "bow", "talisman")
     private var option1 = ""
@@ -66,16 +130,28 @@ class GameView @JvmOverloads constructor(
         isFocusable = true
     }
 
+    // -------------------------------------------------------------
+    // SurfaceView 생명주기 & 메인 루프
+    // -------------------------------------------------------------
     override fun surfaceCreated(holder: SurfaceHolder) {
         running = true
         thread = Thread(this).also { it.start() }
         lastFrameNs = System.nanoTime()
 
-        // 무기 두 가지를 랜덤으로 뽑아서 선택 화면에 표시
+        // 무기 두 가지를 랜덤으로 선택
         val shuffled = availableTypes.shuffled()
         option1 = shuffled[0]
         option2 = shuffled[1]
         gameState = GameState.SELECT_WEAPON
+
+        // 상태 초기화
+        levelUpQueue = 0
+        player = null
+        enemies.clear()
+        weapons.clear()
+        expOrbs.clear()
+        gameStartMs = 0L
+        elapsedMs = 0L
 
         joystick.ensureBase(width, height)
     }
@@ -83,13 +159,17 @@ class GameView @JvmOverloads constructor(
     override fun run() {
         while (running) {
             val now = System.nanoTime()
-            val dtSec = ((now - lastFrameNs).coerceAtMost(100_000_000L)) / 1_000_000_000f
+            val dtSec =
+                ((now - lastFrameNs).coerceAtMost(100_000_000L)) / 1_000_000_000f
             lastFrameNs = now
             update(dtSec)
             drawFrame()
         }
     }
 
+    // -------------------------------------------------------------
+    // 업데이트 로직
+    // -------------------------------------------------------------
     private fun update(dtSec: Float) {
         when (gameState) {
             GameState.SELECT_WEAPON -> {
@@ -100,7 +180,13 @@ class GameView @JvmOverloads constructor(
                 val p = player ?: return
 
                 // 플레이어 이동
-                p.updateByJoystick(joystick.axisX, joystick.axisY, dtSec, width, height)
+                p.updateByJoystick(
+                    joystick.axisX,
+                    joystick.axisY,
+                    dtSec,
+                    width,
+                    height
+                )
 
                 // 적 이동
                 for (e in enemies) {
@@ -109,7 +195,13 @@ class GameView @JvmOverloads constructor(
 
                 val nowMs = System.currentTimeMillis()
 
-                // 무기 업데이트 (데미지만 넣고, 적 제거/경험치는 여기서 하지 않음)
+                // 🔸 타이머 갱신 (최대 8분)
+                if (gameStartMs != 0L) {
+                    val diff = nowMs - gameStartMs
+                    elapsedMs = diff.coerceAtMost(maxTimeMs)
+                }
+
+                // 무기 업데이트
                 for (w in weapons) {
                     w.update(p, enemies, nowMs)
                 }
@@ -118,12 +210,13 @@ class GameView @JvmOverloads constructor(
                 val itE = enemies.iterator()
                 while (itE.hasNext()) {
                     val e = itE.next()
-                    if (e.isDead) {
+                    if (e.isDead) {          // Enemy 쪽에 isDead, expReward 있다고 가정
                         expOrbs += ExpOrb(e.x, e.y, e.expReward)
                         itE.remove()
                     }
                 }
-                // 경험치 구술 자석
+
+                // 2) 경험치 구슬 자석 효과
                 val magnetRadius = 3000f
                 val magnetSpeed = 500f
 
@@ -132,7 +225,8 @@ class GameView @JvmOverloads constructor(
                     val dy = p.y - orb.y
                     val dist2 = dx * dx + dy * dy
                     if (dist2 <= magnetRadius * magnetRadius) {
-                        val dist = sqrt(dist2.toDouble()).toFloat().coerceAtLeast(1e-3f)
+                        val dist =
+                            sqrt(dist2.toDouble()).toFloat().coerceAtLeast(1e-3f)
                         val vx = dx / dist * magnetSpeed
                         val vy = dy / dist * magnetSpeed
                         orb.x += vx * dtSec
@@ -140,17 +234,17 @@ class GameView @JvmOverloads constructor(
                     }
                 }
 
-                // 2) 플레이어가 경험치 구슬을 먹었는지 체크
+                // 3) 플레이어가 경험치 구슬을 먹었는지 체크
                 val itO = expOrbs.iterator()
                 while (itO.hasNext()) {
                     val orb = itO.next()
                     if (orb.isCollected(p.x, p.y, p.radius)) {
-                        p.gainExp(orb.value)   // 여기서 레벨업 발생 가능 (onLevelUp 콜백 호출)
+                        p.gainExp(orb.value)   // Player 쪽에 gainExp / onLevelUp 있음
                         itO.remove()
                     }
                 }
 
-                // 3) 적 스폰
+                // 4) 적 스폰
                 if (nowMs - lastSpawnMs >= 2000L && enemies.size < 25) {
                     spawnEnemies(3)
                     lastSpawnMs = nowMs
@@ -158,11 +252,14 @@ class GameView @JvmOverloads constructor(
             }
 
             GameState.LEVEL_UP -> {
-                // 레벨업 선택 화면에서는 게임이 일시정지된 상태
+                // 레벨업 선택 화면에서는 게임 일시정지
             }
         }
     }
 
+    // -------------------------------------------------------------
+    // 그리기
+    // -------------------------------------------------------------
     private fun drawFrame() {
         val c = holder.lockCanvas() ?: return
         try {
@@ -191,7 +288,8 @@ class GameView @JvmOverloads constructor(
         val optionW = width / 3f
         val optionH = 180f
 
-        val leftRect = RectF(width / 6f, height / 2f, width / 6f + optionW, height / 2f + optionH)
+        val leftRect =
+            RectF(width / 6f, height / 2f, width / 6f + optionW, height / 2f + optionH)
         val rightRect = RectF(
             width / 2f + width / 12f,
             height / 2f,
@@ -218,13 +316,94 @@ class GameView @JvmOverloads constructor(
             p.draw(c)
             weapons.forEach { it.draw(c, p.x, p.y) }
 
-            // HUD
-            c.drawText("ENEMY: ${enemies.size}", 24f, 48f, hud)
-            c.drawText("LV ${p.level}  EXP ${p.exp}/${p.expToNext}", 24f, 96f, hud)
-            c.drawText("HP ${p.hp.toInt()} / ${p.maxHp.toInt()}", 24f, 144f, hud)
+            // HUD(타이머, 경험치바, 체력바, 무기 업그레이드 동그라미)
+            drawHUD(c)
         }
 
         joystick.draw(c)
+    }
+
+    /** 🔹 HUD (기획서 5번 화면) 그리기 */
+    private fun drawHUD(c: Canvas) {
+        val p = player ?: return
+
+        // 1) 경과 시간 (7분부터 빨간색, 8분에서 멈춤)
+        val secTotal = (elapsedMs / 1000).toInt()
+        val min = secTotal / 60
+        val sec = secTotal % 60
+        val timeStr = String.format("%d:%02d", min, sec)
+
+        timerPaint.color =
+            if (elapsedMs >= 7 * 60 * 1000L) Color.RED else Color.WHITE
+        c.drawText(timeStr, width / 2f, 60f, timerPaint)
+
+        // 2) 경험치 바 (플레이어 exp / expToNext 사용)
+        val barLeft = 40f
+        val barRight = width - 40f
+        val expTop = 80f
+        val barHeight = 24f
+
+        c.drawRect(barLeft, expTop, barRight, expTop + barHeight, barBgPaint)
+        val expRatio =
+            (p.exp.toFloat() / p.expToNext.toFloat()).coerceIn(0f, 1f)
+        c.drawRect(
+            barLeft,
+            expTop,
+            barLeft + (barRight - barLeft) * expRatio,
+            expTop + barHeight,
+            expBarPaint
+        )
+
+        // 3) 체력 바
+        val hpTop = expTop + 40f
+        c.drawRect(barLeft, hpTop, barRight, hpTop + barHeight, barBgPaint)
+        val hpRatio = (p.hp / p.maxHp).coerceIn(0f, 1f)
+        c.drawRect(
+            barLeft,
+            hpTop,
+            barLeft + (barRight - barLeft) * hpRatio,
+            hpTop + barHeight,
+            hpBarPaint
+        )
+
+        // 4) 좌측 무기 업그레이드 동그라미
+        val startX = 40f
+        var y = hpTop + 80f
+        val gapY = 40f
+        val circleR = 10f
+        val circleGap = 32f
+
+        fun drawRow(label: String, level: Int) {
+            c.drawText(label, startX, y, weaponTextPaint)
+            val baseX = startX + 80f
+            for (i in 0 until 4) { // 최대 4단계
+                val cx = baseX + i * circleGap
+                val cy = y - 14f
+                if (i < level) {
+                    c.drawCircle(cx, cy, circleR, circleFillPaint)
+                } else {
+                    c.drawCircle(cx, cy, circleR, circleEmptyPaint)
+                }
+            }
+            y += gapY
+        }
+
+        // 현재 무기 레벨 표시(없으면 0)
+        drawRow("검", getWeaponLevel<Sword>())
+        drawRow("도끼", getWeaponLevel<Axe>())
+        drawRow("활", getWeaponLevel<Bow>())
+        drawRow("부적", getWeaponLevel<Talisman>())
+
+        // 5) 적 수 표시 (왼쪽 상단)
+        c.drawText("ENEMY: ${enemies.size}", 24f, hpTop + barHeight + 120f, hud)
+    }
+
+    // 특정 타입 무기의 레벨을 반환 (없으면 0)
+    private inline fun <reified T : Weapon> getWeaponLevel(): Int {
+        for (w in weapons) {
+            if (w is T) return w.level
+        }
+        return 0
     }
 
     /** 🔹 레벨업 카드 화면 (무기 추가 / 무기 강화 3개 중 택1) */
@@ -257,7 +436,8 @@ class GameView @JvmOverloads constructor(
         val top = height / 2f - cardHeight / 2f
 
         val spacing = width / 12f
-        val totalWidth = cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
+        val totalWidth =
+            cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
         val leftStart = (width - totalWidth) / 2f
 
         for (i in currentLevelUpOptions.indices) {
@@ -269,6 +449,9 @@ class GameView @JvmOverloads constructor(
         }
     }
 
+    // -------------------------------------------------------------
+    // 입력 처리
+    // -------------------------------------------------------------
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (gameState) {
             GameState.SELECT_WEAPON -> {
@@ -276,7 +459,8 @@ class GameView @JvmOverloads constructor(
                     val x = event.x
                     val y = event.y
                     val leftRange = width / 6f..(width / 6f + width / 3f)
-                    val rightRange = (width / 2f + width / 12f)..(width / 2f + width / 12f + width / 3f)
+                    val rightRange =
+                        (width / 2f + width / 12f)..(width / 2f + width / 12f + width / 3f)
 
                     if (y in (height / 2f)..(height / 2f + 180f)) {
                         if (x in leftRange) chooseWeapon(option1)
@@ -315,7 +499,8 @@ class GameView @JvmOverloads constructor(
         val top = height / 2f - cardHeight / 2f
 
         val spacing = width / 12f
-        val totalWidth = cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
+        val totalWidth =
+            cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
         val leftStart = (width - totalWidth) / 2f
 
         for (i in currentLevelUpOptions.indices) {
@@ -335,13 +520,13 @@ class GameView @JvmOverloads constructor(
 
         when (option.type) {
             OptionType.ADD_WEAPON -> {
-                // 새 무기 생성 후 리스트에 추가
                 val newWeapon = WeaponFactory.createWeapon(option.weaponType)
                 weapons.add(newWeapon)
             }
+
             OptionType.UPGRADE_WEAPON -> {
-                // 해당 타입의 무기를 찾아서 upgrade()
-                val w = weapons.firstOrNull { weaponTypeOf(it) == option.weaponType }
+                val w =
+                    weapons.firstOrNull { weaponTypeOf(it) == option.weaponType }
                 w?.upgrade()
             }
         }
@@ -349,7 +534,6 @@ class GameView @JvmOverloads constructor(
         // 큐 처리
         levelUpQueue--
         if (levelUpQueue > 0) {
-            // 아직 처리해야 할 레벨업이 남았으면 새로운 옵션 세트 생성
             prepareLevelUpOptions()
             gameState = GameState.LEVEL_UP
         } else {
@@ -365,7 +549,7 @@ class GameView @JvmOverloads constructor(
         p.x = width / 2f
         p.y = height / 2f
 
-        // 레벨업 발생 시 콜백 연결
+        // 레벨업 발생 시 콜백 연결 (Player 안에 onLevelUp: (() -> Unit)? 가 있다고 가정)
         p.onLevelUp = {
             levelUpQueue++
             if (gameState != GameState.LEVEL_UP) {
@@ -382,13 +566,12 @@ class GameView @JvmOverloads constructor(
         spawnEnemies(5)
         gameState = GameState.PLAYING
         lastSpawnMs = System.currentTimeMillis()
+
+        gameStartMs = lastSpawnMs
+        elapsedMs = 0L
     }
 
-    /** 🔹 현재 상태(보유 무기)에 따라 레벨업 옵션 3개 생성
-     *  - 아직 없는 무기 → ADD_WEAPON
-     *  - 가진 무기 중 레벨 < 3 → UPGRADE_WEAPON
-     *  최대 3개 랜덤
-     */
+    /** 🔹 현재 상태(보유 무기)에 따라 레벨업 옵션 3개 생성 */
     private fun prepareLevelUpOptions() {
         val p = player ?: return
 
@@ -419,7 +602,6 @@ class GameView @JvmOverloads constructor(
         }
 
         if (pool.isEmpty()) {
-            // 더 이상 줄 업그레이드가 없으면 그냥 플레이 계속
             currentLevelUpOptions = emptyList()
             gameState = GameState.PLAYING
             levelUpQueue = 0
@@ -448,7 +630,7 @@ class GameView @JvmOverloads constructor(
         else       -> type
     }
 
-    /** 🔹 적 스폰 (나중에 여기서 expReward / hp / speed 다르게 해서 몬스터 종류 늘리면 됨) */
+    /** 🔹 적 스폰 */
     private fun spawnEnemies(count: Int) {
         if (width == 0 || height == 0) return
         repeat(count) {
@@ -462,5 +644,7 @@ class GameView @JvmOverloads constructor(
     }
 
     override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hgt: Int) {}
-    override fun surfaceDestroyed(h: SurfaceHolder) { running = false }
+    override fun surfaceDestroyed(h: SurfaceHolder) {
+        running = false
+    }
 }
