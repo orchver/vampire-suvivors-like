@@ -4,7 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import com.vampiresurvivorslike.player.Player
-import com.vampiresurvivorslike.Enemy
+import com.vampiresurvivorslike.enemy.EnemyBase
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -22,7 +22,6 @@ class Bow : Weapon {
 
     private var projectileCount = 3
     private var angleGapDeg = 10f
-
     private var critChance = 0.20f
     private var critMultiplier = 2.0f
 
@@ -30,7 +29,10 @@ class Bow : Weapon {
     private val arrows = mutableListOf<Arrow>()
     private val speed = 420f
 
-    override fun update(player: Player, enemies: MutableList<Enemy>, nowMs: Long) {
+    // 화살의 충돌 크기 (반지름)
+    private val arrowRadius = 6f
+
+    override fun update(player: Player, enemies: MutableList<EnemyBase>, nowMs: Long) {
         if (nowMs - lastFire >= fireIntervalMs) {
             lastFire = nowMs
             shootFan(player, enemies)
@@ -41,15 +43,24 @@ class Bow : Weapon {
             val a = itA.next()
             a.x += a.vx * (1f/60f)
             a.y += a.vy * (1f/60f)
+
             val itE = enemies.iterator()
             while (itE.hasNext()) {
                 val e = itE.next()
+                if (!e.isAlive) continue
+
                 val dx = e.x - a.x
                 val dy = e.y - a.y
-                if (dx*dx + dy*dy <= 14f*14f) {
+
+                // ★ [충돌 판정] 화살 반지름 + 적 반지름
+                val hitDist = arrowRadius + e.radius
+
+                if (dx*dx + dy*dy <= hitDist * hitDist) {
                     val isCrit = Random.nextFloat() < critChance
                     val dmg = baseDamage * if (isCrit) critMultiplier else 1f
-                    val dead = e.takeDamage(dmg)
+
+                    e.takeDamage(dmg)
+
                     if (!piercing) { a.alive = false; break }
                 }
             }
@@ -57,12 +68,11 @@ class Bow : Weapon {
         }
     }
 
-    // 가장 가까운 적 방향을 기준으로 부채꼴 발사 (없으면 오른쪽(0라디안))
-    private fun shootFan(player: Player, enemies: List<Enemy>) {
+    private fun shootFan(player: Player, enemies: List<EnemyBase>) {
         val target = findNearest(player.x, player.y, enemies)
         val baseAng = if (target != null) {
-            atan2(target.y - player.y, target.x - player.x)  // 최근접 적 방향
-        } else 0f                                             // 적이 없으면 오른쪽
+            atan2(target.y - player.y, target.x - player.x)
+        } else 0f
 
         val n = (projectileCount - 1) / 2
         for (i in -n..n) {
@@ -73,10 +83,11 @@ class Bow : Weapon {
         }
     }
 
-    private fun findNearest(px: Float, py: Float, enemies: List<Enemy>): Enemy? {
-        var best: Enemy? = null
+    private fun findNearest(px: Float, py: Float, enemies: List<EnemyBase>): EnemyBase? {
+        var best: EnemyBase? = null
         var bestD2 = Float.MAX_VALUE
         for (e in enemies) {
+            if (!e.isAlive) continue
             val dx = e.x - px
             val dy = e.y - py
             val d2 = dx*dx + dy*dy
@@ -87,7 +98,7 @@ class Bow : Weapon {
 
     override fun draw(canvas: Canvas, px: Float, py: Float) {
         for (a in arrows) {
-            canvas.drawCircle(a.x, a.y, 6f, paint)
+            canvas.drawCircle(a.x, a.y, arrowRadius, paint)
         }
     }
 

@@ -1,47 +1,45 @@
 package com.vampiresurvivorslike.enemy
 
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import kotlin.math.sqrt
 
 class EnemyExploder(
     x: Float,
-    y: Float
+    y: Float,
+    multiplier: Float = 1f // [추가]
 ) : EnemyBase(
     x = x,
     y = y,
-    hp = 10,
-    atk = 35,
-    moveSpeed = 95f,
-    expValue = 25
+    hp = (5 * multiplier).toInt(),
+    atk = (30 * multiplier).toInt(), // 자폭 데미지도 시간 지날수록 강력해짐
+    moveSpeed = 160f,
+    expReward = (15 * multiplier).toInt(),
+    radius = 20f
 ) {
-    private val explodeRange = 45f //explode range, can be adjusted
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.BLACK
+    }
+
+    override fun draw(c: Canvas) {
+        c.drawCircle(x, y, radius, paint)
+    }
 
     override fun update(dt: Float, targetX: Float, targetY: Float) {
-        // function for Explode type
         if (!isAlive) return
 
-        val dist = distanceTo(targetX, targetY)
-
-        // 폭발 조건
-        if (dist <= explodeRange) {
-            explode()
-            return
-        }
-
-        // 일반 추적
         val dx = targetX - x
         val dy = targetY - y
         val len = sqrt(dx * dx + dy * dy)
 
-        if (len != 0f) {
+        // 자폭 로직 (거리가 가까우면 멈추거나 터질 준비 등)
+        // 현재는 이동만 구현됨
+
+        if (len > 0f) {
             x += (dx / len) * moveSpeed * dt
             y += (dy / len) * moveSpeed * dt
         }
-
         updateAttackTimer(dt)
-    }
-
-    private fun explode() {
-        // 나중에 Player.takeDamage(atk) 연결
-        isAlive = false
     }
 }
