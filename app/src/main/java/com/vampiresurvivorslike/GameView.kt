@@ -105,11 +105,16 @@ class GameView @JvmOverloads constructor(
                 totalGameTime += dtSec
                 // 1. 플레이어 이동
                 p.updateByJoystick(joystick.axisX, joystick.axisY, dtSec, width, height)
+                //무적 푸는 타머
+                p.updateTimer(dtSec)
 
                 // 2. 🚩 [변경] 적 이동 및 스폰 (EnemyManager에게 위임)
                 // EnemyManager 내부에서 spawnTimer를 돌려 적을 추가하고, 살아있는 적을 이동시킴
                 // [수정] 3. 적 업데이트 함수에 'totalGameTime' 전달
-                enemyManager.updateAll(dtSec, p.x, p.y, totalGameTime)
+                enemyManager.updateAll(dtSec, p.x, p.y, totalGameTime, p, width, height)
+
+                //충돌 검사
+                enemyManager.checkCollisions(p)
 
                 val nowMs = System.currentTimeMillis()
 
