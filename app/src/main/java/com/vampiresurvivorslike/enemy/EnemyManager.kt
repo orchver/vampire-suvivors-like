@@ -17,7 +17,7 @@ class EnemyManager {
     // 보스 관련 변수
     var boss: BossEnemy? = null
     private var isBossSpawned = false
-    private val BOSS_SPAWN_TIME = 480f // 8분 (테스트할 땐 10f로 줄여보세요)
+    private val BOSS_SPAWN_TIME = 10f // 8분 (테스트할 땐 10f로 줄여보세요)
 
     // [수정 1] updateAll에서 화면 크기(screenW, screenH)도 받아야 함 (보스 생성용)
     fun updateAll(dt: Float, targetX: Float, targetY: Float, totalTime: Float, player: Player, screenW: Int, screenH: Int) {

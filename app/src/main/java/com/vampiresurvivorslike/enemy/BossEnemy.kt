@@ -23,11 +23,10 @@ class BossEnemy(
     radius = 60f
 ) {
     // ──────── [상태 변수] ────────
-    private var slowTimer = 0f    // 피격 시 감속 타이머
+    private var slowTimer = 0f
 
-    // ★ [수정] 속도 배율 설정
+    // 속도 배율 (피격 시 40% 감속)
     private val baseSpeedMult = 1.2f
-    // 맞으면 평소 속도의 60% (0.6배)가 됨 (40% 감속)
     private val slowedSpeedMult = baseSpeedMult * 0.6f
 
     // ──────── [패턴 1: 돌진 (Dash)] ────────
@@ -39,31 +38,39 @@ class BossEnemy(
     private var dashDuration = 0f
 
     // ──────── [무기 1: 검 (Sword)] ────────
-    private val swordScale = 2.0f
-    private val swordDmg = 25f * 2.0f
+    // 요구사항: 1개의 검이 두배 커지고 데미지도 2배
+    private val swordCount = 1         // ★ [수정] 개수는 1개
+    private val swordScale = 2.0f      // ★ [수정] 크기 2배 (보라색 3단계)
+    private val swordDmg = 25f * 2.0f  // ★ [수정] 데미지 2배 (보라색 3단계)
     private val swordRadius = 100f
     private var swordAngleAccum = 0f
     private val swordAngularSpeed = (Math.PI * 2 / 1.0).toFloat()
-    private val swordCount = 4
 
     // ──────── [무기 2: 활 (Bow)] ────────
+    // 요구사항: 투사체 5개, 치명타 100% + 피해량 900%
+    private val arrowCount = 5         // ★ [수정] 요청하신 대로 5개 설정
+    // 기본 데미지(10) * 9.0배 (치명타 배율)
     private val arrowFinalDmg = 10f * 9.0f
+
     private var bowTimer = 0f
     private val bowInterval = 2.5f
     private val arrowSpeed = 420f
-    private val arrowCount = 9
     private val arrowGapDeg = 10f
 
     private data class BossArrow(var x: Float, var y: Float, var vx: Float, var vy: Float, var lifeTime: Float = 0f)
     private val bossArrows = mutableListOf<BossArrow>()
 
     // ──────── [무기 3: 부적 (Talisman)] ────────
-    private val talismanDmg = 15f * 2.0f
+    // 요구사항: 투사체 개수 12개 (보라색 3단계)
+    // 폭발 범위/피해량 증가는 노란색 옵션이므로 적용 X (기본값 사용)
+    private val talismanCount = 12     // ★ [수정] 개수 12개 (보라색 3단계)
+    private val talismanDmg = 15f      // 기본 데미지 (증가 없음)
+    private val explosionRadius = 100f // 기본 폭발 범위
+
     private var talismanTimer = 0f
     private val talismanInterval = 4.0f
     private val talismanSpeed = 200f
     private val talismanLifeMax = 2.0f
-    private val talismanCount = 12
     private val homingStrength = 0.05f
 
     private data class BossOrb(var x: Float, var y: Float, var vx: Float, var vy: Float, var lifeTime: Float = 0f)
@@ -98,7 +105,6 @@ class BossEnemy(
     }
 
     private fun updateChaseLogic(dt: Float) {
-        // ★ [적용] 피격 시 감속된 속도 적용
         val speedMult = if (slowTimer > 0f) slowedSpeedMult else baseSpeedMult
         val actualSpeed = player.moveSpeed * speedMult
 
@@ -138,11 +144,13 @@ class BossEnemy(
 
         for (i in 0 until swordCount) {
             val ang = swordAngleAccum + step * i
+            // swordScale이 적용된 반지름 위치 계산
             val currentRadius = swordRadius + (16f * swordScale)
             val sx = x + cos(ang) * currentRadius
             val sy = y + sin(ang) * currentRadius
 
             val dist = hypot(player.x - sx, player.y - sy)
+            // 검 크기에 따른 충돌 범위 증가
             val hitRange = (18f * swordScale) + player.radius
 
             if (dist <= hitRange) {
@@ -198,9 +206,8 @@ class BossEnemy(
             val o = iterator.next()
             o.lifeTime += dt
 
-            // 2초 뒤 폭발
+            // 2초 뒤 폭발 (범위 데미지)
             if (o.lifeTime >= talismanLifeMax) {
-                val explosionRadius = 120f
                 if (hypot(player.x - o.x, player.y - o.y) <= explosionRadius + player.radius) {
                     player.takeDamage(talismanDmg)
                 }
@@ -208,14 +215,16 @@ class BossEnemy(
                 continue
             }
 
-            // 유도
+            // 유도 로직
             val dx = player.x - o.x
             val dy = player.y - o.y
             val d = hypot(dx, dy).coerceAtLeast(1e-3f)
             val targetVx = (dx / d) * talismanSpeed
             val targetVy = (dy / d) * talismanSpeed
+
             o.vx = (1 - homingStrength) * o.vx + homingStrength * targetVx
             o.vy = (1 - homingStrength) * o.vy + homingStrength * targetVy
+
             val vLen = hypot(o.vx, o.vy).coerceAtLeast(1e-3f)
             o.vx = (o.vx / vLen) * talismanSpeed
             o.vy = (o.vy / vLen) * talismanSpeed
@@ -223,6 +232,7 @@ class BossEnemy(
             o.x += o.vx * dt
             o.y += o.vy * dt
 
+            // 직접 충돌 시 데미지
             if (hypot(player.x - o.x, player.y - o.y) <= 8f + player.radius) {
                 player.takeDamage(talismanDmg)
                 iterator.remove()
@@ -252,9 +262,7 @@ class BossEnemy(
         }
     }
 
-    // ★ [피격 시 슬로우 발동]
     override fun takeDamage(damage: Float): Boolean {
-        // 맞으면 1초 동안 느려짐
         slowTimer = 1.0f
         return super.takeDamage(damage)
     }
