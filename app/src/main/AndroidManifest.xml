@@ -11,15 +11,29 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.vampiresurvivorslike">
-
         <activity
-            android:name=".MainActivity"
+            android:name=".LoadGameActivity"
+            android:exported="false" />
+        <!-- 1. 설정 화면 -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" /> <!-- 2. 로그인 화면 (여기를 시작점으로 변경!) -->
+        <activity
+            android:name=".LoginActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-
+        </activity> <!-- 3. 타이틀 화면 -->
+        <activity
+            android:name=".TitleActivity"
+            android:exported="false" /> <!-- 4. 게임 화면 (기존 MainActivity) -->
+        <!-- 주의: 만약 파일 이름을 GameActivity로 바꿨다면 .GameActivity로 적으세요 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
     </application>
+
 </manifest>

@@ -1,5 +1,6 @@
 package com.vampiresurvivorslike
 
+import kotlin.math.sqrt
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
@@ -10,17 +11,152 @@ import com.vampiresurvivorslike.enemy.EnemyManager
 import com.vampiresurvivorslike.input.Joystick
 import com.vampiresurvivorslike.player.Player
 import com.vampiresurvivorslike.weapons.*
-import kotlin.math.sqrt
 import kotlin.random.Random
+
+//Gson 관련 import 추가
+import android.content.SharedPreferences
+import com.google.gson.Gson
+
 
 class GameView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback, Runnable {
 
-    // 🔹 타이머 & 경험치 바 (Code 2에서 가져옴)
-    private var gameStartMs: Long = 0L
-    private var elapsedMs: Long = 0L
+
+    // [추가] 현재 로그인한 유저 ID (기본값은 guest)
+    var currentUserId: String = "guest"
+
+    // 진행상황 저장 기능
+    fun saveGame(slotIndex: Int = -1) {
+        val p = player ?: return // 플레이어가 없으면 저장 안함
+
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA).apply {
+            timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul")
+        }
+        val dateStr = dateFormat.format(java.util.Date())
+
+        // 1. 현재 무기 리스트를 저장용 정보로 변환
+        val weaponSaveList = weapons.map { w ->
+            WeaponSaveInfo(
+                type = weaponTypeOf(w), // 기존에 만들어둔 함수 활용
+                level = w.level
+            )
+        }
+
+        // 2. 저장할 전체 데이터 객체 생성
+        val saveData = GameSaveData(
+            userId = currentUserId,
+            saveDate = dateStr,
+            elapsedMs = elapsedMs,
+            playerHp = p.hp,
+            playerMaxHp = p.maxHp,
+            playerExp = p.exp,
+            playerLevel = p.level,
+            playerX = p.x,
+            playerY = p.y,
+            weapons = weaponSaveList
+        )
+
+        // 3. JSON 변환 및 SharedPreferences 저장 (키값을 동적으로 변경)
+        val gson = Gson()
+        val jsonString = gson.toJson(saveData)
+
+        // slotIndex가 -1이면 "save_auto", 아니면 "save_slot_번호"
+        val fileName = if (slotIndex == -1) "save_auto" else "save_slot_$slotIndex"
+
+        val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
+        // "save_slot_0", "save_slot_1" ... 식으로 저장됨
+        pref.edit().putString("save_slot_$slotIndex", jsonString).apply()
+
+        if (slotIndex != -1) {
+            post {
+                android.widget.Toast.makeText(
+                    context,
+                    "${slotIndex + 1}번 슬롯에 저장됨!",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    // 진행상황 로드 기능
+
+    fun loadGame(slotIndex: Int = 0): Boolean {
+        val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
+        val fileName = "save_slot_$slotIndex"
+        val jsonString = pref.getString(fileName, null) ?: return false
+
+        try {
+            val gson = Gson()
+            val data = gson.fromJson(jsonString, GameSaveData::class.java)
+
+            // 1. 게임 시간 복구
+            elapsedMs = data.elapsedMs
+            gameStartMs = System.currentTimeMillis() - elapsedMs
+
+            totalGameTime = elapsedMs / 1000f
+
+            // 2. 무기 복구
+            weapons.clear()
+            if (data.weapons.isNotEmpty()) {
+                for (info in data.weapons) {
+                    val newWeapon = WeaponFactory.createWeapon(info.type)
+                    // 레벨만큼 강화 반복
+                    repeat(info.level) {
+                        newWeapon.upgrade()
+                    }
+                    weapons.add(newWeapon)
+                }
+            } else {
+                weapons.add(WeaponFactory.createWeapon("sword"))
+            }
+
+            // 3. 플레이어 복구
+            val restoredPlayer = Player(weapons[0])
+            restoredPlayer.apply {
+                hp = data.playerHp
+                maxHp = data.playerMaxHp
+                exp = data.playerExp
+                level = data.playerLevel
+                x = data.playerX
+                y = data.playerY
+
+                // 경험치 요구량 재계산
+                expToNext = 200 * (1 shl (level - 1))
+
+                // 레벨업 콜백 연결
+                onLevelUp = {
+                    levelUpQueue++
+                    if (gameState != GameState.LEVEL_UP) {
+                        prepareLevelUpOptions()
+                        gameState = GameState.LEVEL_UP
+                    }
+                }
+            }
+            player = restoredPlayer
+
+            // 4. 적 및 아이템 초기화
+            enemyManager.enemies.clear()
+
+            expOrbs.clear()
+
+            // 5. 상태 변경
+            gameState = GameState.PLAYING
+
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+
+
+
+
+    // 🔹 타이머 & 경험치 바
+    private var gameStartMs: Long = 0L          // 게임 시작시간
+    private var elapsedMs: Long = 0L           // 게임 지난시간
     private val maxTimeMs = 8 * 60 * 1000L     // 8분
 
     // 🔹 HUD용 페인트들 (Code 2에서 가져옴)
@@ -61,7 +197,7 @@ class GameView @JvmOverloads constructor(
     }
 
     // 🔹 전체 게임 상태
-    private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP }
+    private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP, PAUSED, SAVE_SELECT }
     private var gameState = GameState.SELECT_WEAPON
 
     // 🔹 레벨업 카드 타입
@@ -76,6 +212,11 @@ class GameView @JvmOverloads constructor(
         val weaponType: String,
         val description: String
     )
+
+    private val pauseBtnRect = RectF() // 게임 중 일시정지 버튼 위치
+    private val menuRects = Array(3) { RectF() } // 일시정지 메뉴 버튼들 (재개, 저장, 나가기)
+    private val slotRects = Array(5) { RectF() } // 슬롯 5개 버튼들
+    private val backBtnRect = RectF() // 슬롯 화면에서 뒤로가기
 
     private var currentLevelUpOptions: List<LevelUpOption> = emptyList()
 
@@ -221,6 +362,10 @@ class GameView @JvmOverloads constructor(
             }
 
             GameState.LEVEL_UP -> { }
+
+            GameState.PAUSED -> { }
+
+            GameState.SAVE_SELECT -> { }
         }
     }
 
@@ -232,6 +377,8 @@ class GameView @JvmOverloads constructor(
                 GameState.SELECT_WEAPON -> drawWeaponSelectScreen(c)
                 GameState.PLAYING      -> drawGamePlay(c)
                 GameState.LEVEL_UP     -> drawLevelUpScreen(c)
+                GameState.PAUSED -> drawPauseMenu(c)       // 새로 추가
+                GameState.SAVE_SELECT -> drawSaveSelectScreen(c) // 새로 추가
             }
         } finally {
             holder.unlockCanvasAndPost(c)
@@ -280,6 +427,111 @@ class GameView @JvmOverloads constructor(
     }
 
     // 🚩 [이식] Code 2의 HUD (타이머, HP바, EXP바, 무기레벨)
+    // 일시정지 메뉴 그리기 (재개, 저장, 나가기)
+    private fun drawPauseMenu(c: Canvas) {
+        // 반투명 검은 배경
+        c.drawColor(Color.argb(150, 0, 0, 0))
+
+        val labels = listOf("게임 재개", "게임 저장", "타이틀로")
+        val btnW = 400f
+        val btnH = 100f
+        val gap = 40f
+        val startY = height / 2f - (labels.size * (btnH + gap)) / 2f
+
+        val rectPaint = Paint().apply { color = Color.LTGRAY }
+        val textPaint = Paint().apply { color = Color.BLACK; textSize = 50f; textAlign = Paint.Align.CENTER }
+
+        for (i in labels.indices) {
+            val cx = width / 2f
+            val cy = startY + i * (btnH + gap) + btnH / 2f
+            val rect = RectF(cx - btnW / 2, cy - btnH / 2, cx + btnW / 2, cy + btnH / 2)
+            menuRects[i] = rect // 터치 처리를 위해 저장
+
+            c.drawRoundRect(rect, 20f, 20f, rectPaint)
+
+            val fm = textPaint.fontMetrics
+            val baseline = rect.centerY() - (fm.descent + fm.ascent) / 2
+            c.drawText(labels[i], rect.centerX(), baseline, textPaint)
+        }
+    }
+
+    // 저장 슬롯 선택 화면 그리기 (1~5번 슬롯)
+    // GameView.kt 내부 drawSaveSelectScreen 함수
+
+    private fun drawSaveSelectScreen(c: Canvas) {
+        c.drawColor(Color.argb(220, 0, 0, 0)) // 배경
+
+        val titlePaint = Paint().apply { color = Color.WHITE; textSize = 60f; textAlign = Paint.Align.CENTER }
+        c.drawText("슬롯 선택", width / 2f, 100f, titlePaint)
+
+        val btnW = 700f
+        val btnH = 120f
+        val gap = 30f
+        val startY = 200f
+
+        val slotBgPaint = Paint().apply { color = Color.DKGRAY }
+        val lockedPaint = Paint().apply { color = Color.RED; style = Paint.Style.STROKE; strokeWidth = 5f }
+
+        // 텍스트 스타일 정의
+        val mainTextPaint = Paint().apply { color = Color.WHITE; textSize = 36f; textAlign = Paint.Align.CENTER }
+        val subTextPaint = Paint().apply { color = Color.LTGRAY; textSize = 28f; textAlign = Paint.Align.CENTER }
+        val emptyTextPaint = Paint().apply { color = Color.GRAY; textSize = 40f; textAlign = Paint.Align.CENTER }
+
+        val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
+        val gson = Gson()
+
+        for (i in 0 until 5) {
+            val cx = width / 2f
+            val cy = startY + i * (btnH + gap) + btnH / 2f
+            val rect = RectF(cx - btnW / 2, cy - btnH / 2, cx + btnW / 2, cy + btnH / 2)
+            slotRects[i] = rect
+
+            c.drawRoundRect(rect, 20f, 20f, slotBgPaint)
+
+            val json = pref.getString("save_slot_$i", null)
+
+            if (json != null) {
+                try {
+                    val data = gson.fromJson(json, GameSaveData::class.java)
+
+                    // 유저이름 / 플레이 날짜 / 진행상태
+                    // 한 줄에 다 넣으면 길어서 두 줄로 나눔
+                    // 위쪽: 유저ID / 날짜
+                    val infoText = "${data.userId} / ${data.saveDate}"
+                    // 아래쪽: 레벨 (경과 시간)
+                    val progressText = "Lv.${data.playerLevel} (${formatTime(data.elapsedMs)})"
+
+                    c.drawText(infoText, cx, cy - 15f, mainTextPaint)
+                    c.drawText(progressText, cx, cy + 35f, subTextPaint)
+
+                    // 다른 유저의 데이터면 빨간 테두리 표시 (내용은 보여줌)
+                    if (data.userId != currentUserId) {
+                        c.drawRoundRect(rect, 20f, 20f, lockedPaint)
+                    }
+                } catch (e: Exception) {
+                    c.drawText("데이터 오류", cx, cy + 10f, emptyTextPaint)
+                }
+            } else {
+                // 빈 슬롯일 때는 심플하게 번호만 표시
+                c.drawText("슬롯 ${i + 1}", cx, cy + 15f, emptyTextPaint)
+            }
+        }
+
+        // 뒤로가기 버튼
+        backBtnRect.set(width / 2f - 100f, height - 150f, width / 2f + 100f, height - 50f)
+        val backPaint = Paint().apply { color = Color.RED }
+        c.drawRoundRect(backBtnRect, 20f, 20f, backPaint)
+        c.drawText("취소", backBtnRect.centerX(), backBtnRect.centerY() + 15f, mainTextPaint)
+    }
+
+    // 시간 포맷용 보조 함수
+    private fun formatTime(ms: Long): String {
+        val sec = ms / 1000
+        return "${sec / 60}:${String.format("%02d", sec % 60)}"
+    }
+
+
+    /** 🔹 HUD (기획서 5번 화면) 그리기 */
     private fun drawHUD(c: Canvas) {
         val p = player ?: return
 
@@ -334,6 +586,22 @@ class GameView @JvmOverloads constructor(
 
         // 5) 적 숫자 표시 (enemies -> enemyManager.enemies로 변경)
         c.drawText("ENEMY: ${enemyManager.enemies.size}", 24f, hpTop + barHeight + 120f, hudTextPaint)
+
+        // 6) 우측 상단 일시정지 버튼 (|| 모양)
+        val btnSize = 80f
+        val margin = 20f
+        pauseBtnRect.set(width - btnSize - margin, margin, width - margin, margin + btnSize)
+
+        // 버튼 배경
+        val btnPaint = Paint().apply { color = Color.DKGRAY; style = Paint.Style.FILL }
+        c.drawRoundRect(pauseBtnRect, 10f, 10f, btnPaint)
+
+        // || 모양 텍스트
+        val textPaint = Paint().apply { color = Color.WHITE; textSize = 50f; textAlign = Paint.Align.CENTER }
+        // 텍스트 수직 중앙 정렬 보정
+        val fontMetrics = textPaint.fontMetrics
+        val baseline = pauseBtnRect.centerY() - (fontMetrics.descent + fontMetrics.ascent) / 2
+        c.drawText("||", pauseBtnRect.centerX(), baseline, textPaint)
     }
 
     // HUD용 헬퍼 함수
@@ -386,6 +654,12 @@ class GameView @JvmOverloads constructor(
                 return true
             }
             GameState.PLAYING -> {
+                // [추가된 부분] 버튼 영역을 눌렀는지 먼저 확인
+                if (event.action == MotionEvent.ACTION_DOWN && pauseBtnRect.contains(event.x, event.y)) {
+                    gameState = GameState.PAUSED
+                    return true
+                }
+
                 val handled = joystick.onTouchEvent(event)
                 if (handled) performClick()
                 return handled || super.onTouchEvent(event)
@@ -394,8 +668,76 @@ class GameView @JvmOverloads constructor(
                 if (event.action == MotionEvent.ACTION_DOWN) handleLevelUpTouch(event.x, event.y)
                 return true
             }
+
+            GameState.PAUSED -> {
+                val x = event.x
+                val y = event.y
+                // 0: 재개, 1: 저장, 2: 나가기
+                for (i in menuRects.indices) {
+                    if (menuRects[i].contains(x, y)) {
+                        when (i) {
+                            0 -> gameState = GameState.PLAYING
+                            1 -> gameState = GameState.SAVE_SELECT
+                            2 -> {
+                                // 액티비티 종료 (TitleActivity로 돌아감)
+                                (context as? android.app.Activity)?.finish()
+                            }
+                        }
+                        break
+                    }
+                }
+                return true
+            }
+
+            GameState.SAVE_SELECT -> {
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    val x = event.x
+                    val y = event.y
+                    val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
+                    val gson = Gson()
+
+                    // 슬롯 1~5 선택
+                    for (i in slotRects.indices) {
+                        if (slotRects[i].contains(x, y)) {
+                            // 1. 저장된 데이터가 있는지, 있다면 주인(userId)이 누구인지 확인
+                            val json = pref.getString("save_slot_$i", null)
+                            var canSave = true
+
+                            if (json != null) {
+                                try {
+                                    val data = gson.fromJson(json, GameSaveData::class.java)
+                                    // 저장된 ID가 현재 로그인한 ID와 다르면 저장 불가
+                                    if (data.userId != currentUserId) {
+                                        canSave = false
+                                    }
+                                } catch (e: Exception) {
+                                    // 데이터가 깨졌으면 그냥 덮어쓰기 허용 (선택 사항)
+                                }
+                            }
+
+                            // 2. 저장 실행 또는 거부
+                            if (canSave) {
+                                saveGame(i) // 내 슬롯이거나 빈 슬롯이면 저장
+                                gameState = GameState.PAUSED
+                            } else {
+                                // 남의 슬롯이면 경고 메시지
+                                android.widget.Toast.makeText(context, "다른 유저의 슬롯입니다! 덮어쓸 수 없습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            return true
+                        }
+                    }
+
+                    // 취소(뒤로가기) 버튼
+                    if (backBtnRect.contains(x, y)) {
+                        gameState = GameState.PAUSED
+                    }
+                }
+                return true
+            }
+
         }
     }
+
 
     override fun performClick(): Boolean { super.performClick(); return true }
 
@@ -513,3 +855,22 @@ class GameView @JvmOverloads constructor(
     override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hgt: Int) {}
     override fun surfaceDestroyed(h: SurfaceHolder) { running = false }
 }
+
+// 저장할 데이터 구조체
+data class GameSaveData(
+    val userId: String = "guest", // [추가] 저장한 유저 ID
+    val saveDate: String = "",    // [추가] 저장 날짜 (yyyy-MM-dd HH:mm)
+    val elapsedMs: Long,         // 진행 시간
+    val playerHp: Float,         // 현재 체력
+    val playerMaxHp: Float,      // 최대 체력
+    val playerExp: Int,          // 현재 경험치
+    val playerLevel: Int,        // 플레이어 레벨
+    val playerX: Float,          // 위치 X
+    val playerY: Float,          // 위치 Y
+    val weapons: List<WeaponSaveInfo> // 무기 목록
+)
+
+data class WeaponSaveInfo(
+    val type: String, // "sword", "axe" 등
+    val level: Int    // 무기 레벨
+)
