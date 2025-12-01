@@ -9,6 +9,10 @@ class Player(var weapon: com.vampiresurvivorslike.weapons.Weapon) {
     var x = 0f
     var y = 0f
     val radius = 24f
+    //적에게 피격시 무적, 없으면 바로 죽어버림
+    private var isInvincible = false
+    private var invincibleTimer = 0f
+    private val INVINCIBILITY_DURATION = 0.5f
 
     // ─ 체력 시스템 ─
     var maxHp = 100f
@@ -69,5 +73,26 @@ class Player(var weapon: com.vampiresurvivorslike.weapons.Weapon) {
             //    GameView의 레벨업 선택 UI에서 어떤 무기를 올릴지 결정
             onLevelUp?.invoke()
         }
+    }
+    //  매 프레임 무적 시간을 깎아주는 함수
+    fun updateTimer(dt: Float) {
+        if (isInvincible) {
+            invincibleTimer -= dt
+            if (invincibleTimer <= 0f) {
+                isInvincible = false
+            }
+        }
+    }
+
+    //  적이 호출할 데미지 함수
+    fun takeDamage(amount: Float) {
+        if (isInvincible) return // 무적이면 무시
+
+        hp -= amount
+        if (hp < 0) hp = 0f
+
+        // 피격 시 무적 발동
+        isInvincible = true
+        invincibleTimer = INVINCIBILITY_DURATION
     }
 }
