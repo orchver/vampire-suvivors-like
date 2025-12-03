@@ -29,6 +29,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        //죽을데 save 안함
+        if (::gameView.isInitialized && !gameView.isGameOver()) {
+            gameView.saveGame()
+        }
         gameView.saveGame()
     }
 }

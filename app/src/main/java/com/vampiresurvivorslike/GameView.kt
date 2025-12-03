@@ -31,9 +31,10 @@ class GameView @JvmOverloads constructor(
     fun saveGame(slotIndex: Int = -1) {
         val p = player ?: return // 플레이어가 없으면 저장 안함
 
-        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA).apply {
-            timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul")
-        }
+        val dateFormat =
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA).apply {
+                timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul")
+            }
         val dateStr = dateFormat.format(java.util.Date())
 
         // 1. 현재 무기 리스트를 저장용 정보로 변환
@@ -152,8 +153,6 @@ class GameView @JvmOverloads constructor(
     }
 
 
-
-
     // 🔹 타이머 & 경험치 바
     private var gameStartMs: Long = 0L          // 게임 시작시간
     private var elapsedMs: Long = 0L           // 게임 지난시간
@@ -190,6 +189,7 @@ class GameView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }
+
     // 적 숫자 표시용 (Code 2 style)
     private val hudTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -197,7 +197,8 @@ class GameView @JvmOverloads constructor(
     }
 
     // 🔹 전체 게임 상태
-    private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP, PAUSED, SAVE_SELECT }
+    private enum class GameState { SELECT_WEAPON, PLAYING, LEVEL_UP, PAUSED, SAVE_SELECT, GAME_OVER }
+
     private var gameState = GameState.SELECT_WEAPON
 
     // 🔹 레벨업 카드 타입
@@ -221,7 +222,8 @@ class GameView @JvmOverloads constructor(
     private var currentLevelUpOptions: List<LevelUpOption> = emptyList()
 
     private lateinit var thread: Thread
-    @Volatile private var running = false
+    @Volatile
+    private var running = false
 
     private val bg = Paint().apply { color = Color.BLACK }
 
@@ -245,7 +247,10 @@ class GameView @JvmOverloads constructor(
         val radius: Float = 10f
     ) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GREEN }
-        fun draw(c: Canvas) { c.drawCircle(x, y, radius, paint) }
+        fun draw(c: Canvas) {
+            c.drawCircle(x, y, radius, paint)
+        }
+
         fun isCollected(px: Float, py: Float, pr: Float): Boolean {
             val dx = px - x
             val dy = py - y
@@ -292,7 +297,7 @@ class GameView @JvmOverloads constructor(
 
     private fun update(dtSec: Float) {
         when (gameState) {
-            GameState.SELECT_WEAPON -> { }
+            GameState.SELECT_WEAPON -> {}
 
             GameState.PLAYING -> {
                 val p = player ?: return
@@ -358,14 +363,21 @@ class GameView @JvmOverloads constructor(
                         p.gainExp(orb.value)
                         itO.remove()
                     }
+                    // 8. HP가 0이면 게임 오버 상태로 전환
+                    if (p.hp <= 0f) {
+                        gameState = GameState.GAME_OVER
+                    }
                 }
             }
 
-            GameState.LEVEL_UP -> { }
+            GameState.LEVEL_UP -> {}
 
-            GameState.PAUSED -> { }
+            GameState.PAUSED -> {}
 
-            GameState.SAVE_SELECT -> { }
+            GameState.SAVE_SELECT -> {}
+
+            GameState.GAME_OVER -> { }
+
         }
     }
 
@@ -375,10 +387,11 @@ class GameView @JvmOverloads constructor(
             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bg)
             when (gameState) {
                 GameState.SELECT_WEAPON -> drawWeaponSelectScreen(c)
-                GameState.PLAYING      -> drawGamePlay(c)
-                GameState.LEVEL_UP     -> drawLevelUpScreen(c)
+                GameState.PLAYING -> drawGamePlay(c)
+                GameState.LEVEL_UP -> drawLevelUpScreen(c)
                 GameState.PAUSED -> drawPauseMenu(c)       // 새로 추가
                 GameState.SAVE_SELECT -> drawSaveSelectScreen(c) // 새로 추가
+                GameState.GAME_OVER -> drawGameOverScreen(c)
             }
         } finally {
             holder.unlockCanvasAndPost(c)
@@ -397,7 +410,12 @@ class GameView @JvmOverloads constructor(
         val optionW = width / 3f
         val optionH = 180f
         val leftRect = RectF(width / 6f, height / 2f, width / 6f + optionW, height / 2f + optionH)
-        val rightRect = RectF(width / 2f + width / 12f, height / 2f, width / 2f + width / 12f + optionW, height / 2f + optionH)
+        val rightRect = RectF(
+            width / 2f + width / 12f,
+            height / 2f,
+            width / 2f + width / 12f + optionW,
+            height / 2f + optionH
+        )
 
         c.drawRoundRect(leftRect, 40f, 40f, rectPaint)
         c.drawRoundRect(rightRect, 40f, 40f, rectPaint)
@@ -439,7 +457,8 @@ class GameView @JvmOverloads constructor(
         val startY = height / 2f - (labels.size * (btnH + gap)) / 2f
 
         val rectPaint = Paint().apply { color = Color.LTGRAY }
-        val textPaint = Paint().apply { color = Color.BLACK; textSize = 50f; textAlign = Paint.Align.CENTER }
+        val textPaint =
+            Paint().apply { color = Color.BLACK; textSize = 50f; textAlign = Paint.Align.CENTER }
 
         for (i in labels.indices) {
             val cx = width / 2f
@@ -455,13 +474,48 @@ class GameView @JvmOverloads constructor(
         }
     }
 
+    // 게임 오버 화면
+    private fun drawGameOverScreen(c: Canvas) {
+
+        c.drawColor(Color.argb(200, 0, 0, 0))
+
+        // GAME OVER
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 80f
+            textAlign = Paint.Align.CENTER
+        }
+        c.drawText("GAME OVER", width / 2f, height / 3f, titlePaint)
+
+
+        val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.LTGRAY
+            textSize = 40f
+            textAlign = Paint.Align.CENTER
+        }
+
+        val p = player
+        if (p != null) {
+            val secTotal = (elapsedMs / 1000).toInt()
+            val min = secTotal / 60
+            val sec = secTotal % 60
+            val timeStr = String.format("%d:%02d", min, sec)
+
+            c.drawText("생존 시간 : $timeStr", width / 2f, height / 3f + 80f, infoPaint)
+            c.drawText("도달 레벨 : ${p.level}", width / 2f, height / 3f + 140f, infoPaint)
+        }
+
+        c.drawText("화면을 터치하면 타이틀로 돌아갑니다", width / 2f, height * 0.7f, infoPaint)
+    }
+
     // 저장 슬롯 선택 화면 그리기 (1~5번 슬롯)
     // GameView.kt 내부 drawSaveSelectScreen 함수
 
     private fun drawSaveSelectScreen(c: Canvas) {
         c.drawColor(Color.argb(220, 0, 0, 0)) // 배경
 
-        val titlePaint = Paint().apply { color = Color.WHITE; textSize = 60f; textAlign = Paint.Align.CENTER }
+        val titlePaint =
+            Paint().apply { color = Color.WHITE; textSize = 60f; textAlign = Paint.Align.CENTER }
         c.drawText("슬롯 선택", width / 2f, 100f, titlePaint)
 
         val btnW = 700f
@@ -470,12 +524,16 @@ class GameView @JvmOverloads constructor(
         val startY = 200f
 
         val slotBgPaint = Paint().apply { color = Color.DKGRAY }
-        val lockedPaint = Paint().apply { color = Color.RED; style = Paint.Style.STROKE; strokeWidth = 5f }
+        val lockedPaint =
+            Paint().apply { color = Color.RED; style = Paint.Style.STROKE; strokeWidth = 5f }
 
         // 텍스트 스타일 정의
-        val mainTextPaint = Paint().apply { color = Color.WHITE; textSize = 36f; textAlign = Paint.Align.CENTER }
-        val subTextPaint = Paint().apply { color = Color.LTGRAY; textSize = 28f; textAlign = Paint.Align.CENTER }
-        val emptyTextPaint = Paint().apply { color = Color.GRAY; textSize = 40f; textAlign = Paint.Align.CENTER }
+        val mainTextPaint =
+            Paint().apply { color = Color.WHITE; textSize = 36f; textAlign = Paint.Align.CENTER }
+        val subTextPaint =
+            Paint().apply { color = Color.LTGRAY; textSize = 28f; textAlign = Paint.Align.CENTER }
+        val emptyTextPaint =
+            Paint().apply { color = Color.GRAY; textSize = 40f; textAlign = Paint.Align.CENTER }
 
         val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
         val gson = Gson()
@@ -552,13 +610,25 @@ class GameView @JvmOverloads constructor(
 
         c.drawRect(barLeft, expTop, barRight, expTop + barHeight, barBgPaint)
         val expRatio = (p.exp.toFloat() / p.expToNext.toFloat()).coerceIn(0f, 1f)
-        c.drawRect(barLeft, expTop, barLeft + (barRight - barLeft) * expRatio, expTop + barHeight, expBarPaint)
+        c.drawRect(
+            barLeft,
+            expTop,
+            barLeft + (barRight - barLeft) * expRatio,
+            expTop + barHeight,
+            expBarPaint
+        )
 
         // 3) 체력 바
         val hpTop = expTop + 40f
         c.drawRect(barLeft, hpTop, barRight, hpTop + barHeight, barBgPaint)
         val hpRatio = (p.hp / p.maxHp).coerceIn(0f, 1f)
-        c.drawRect(barLeft, hpTop, barLeft + (barRight - barLeft) * hpRatio, hpTop + barHeight, hpBarPaint)
+        c.drawRect(
+            barLeft,
+            hpTop,
+            barLeft + (barRight - barLeft) * hpRatio,
+            hpTop + barHeight,
+            hpBarPaint
+        )
 
         // 4) 무기 업그레이드 표시
         val startX = 40f
@@ -584,8 +654,6 @@ class GameView @JvmOverloads constructor(
         drawRow("활", getWeaponLevel<Bow>())
         drawRow("부적", getWeaponLevel<Talisman>())
 
-        // 5) 적 숫자 표시 (enemies -> enemyManager.enemies로 변경)
-        c.drawText("ENEMY: ${enemyManager.enemies.size}", 24f, hpTop + barHeight + 120f, hudTextPaint)
 
         // 6) 우측 상단 일시정지 버튼 (|| 모양)
         val btnSize = 80f
@@ -597,7 +665,8 @@ class GameView @JvmOverloads constructor(
         c.drawRoundRect(pauseBtnRect, 10f, 10f, btnPaint)
 
         // || 모양 텍스트
-        val textPaint = Paint().apply { color = Color.WHITE; textSize = 50f; textAlign = Paint.Align.CENTER }
+        val textPaint =
+            Paint().apply { color = Color.WHITE; textSize = 50f; textAlign = Paint.Align.CENTER }
         // 텍스트 수직 중앙 정렬 보정
         val fontMetrics = textPaint.fontMetrics
         val baseline = pauseBtnRect.centerY() - (fontMetrics.descent + fontMetrics.ascent) / 2
@@ -617,24 +686,35 @@ class GameView @JvmOverloads constructor(
         val overlay = Paint().apply { color = Color.argb(180, 0, 0, 0) }
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlay)
 
-        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 64f; textAlign = Paint.Align.CENTER }
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textSize = 64f; textAlign = Paint.Align.CENTER
+        }
         c.drawText("LEVEL UP!", width / 2f, height / 4f, titlePaint)
 
-        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.DKGRAY; style = Paint.Style.FILL }
-        val cardText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 40f; textAlign = Paint.Align.CENTER }
+        val cardPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.DKGRAY; style = Paint.Style.FILL }
+        val cardText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textSize = 40f; textAlign = Paint.Align.CENTER
+        }
 
         val cardWidth = width / 4f
         val cardHeight = 220f
         val top = height / 2f - cardHeight / 2f
         val spacing = width / 12f
-        val totalWidth = cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
+        val totalWidth =
+            cardWidth * currentLevelUpOptions.size + spacing * (currentLevelUpOptions.size - 1)
         val leftStart = (width - totalWidth) / 2f
 
         for (i in currentLevelUpOptions.indices) {
             val left = leftStart + i * (cardWidth + spacing)
             val rect = RectF(left, top, left + cardWidth, top + cardHeight)
             c.drawRoundRect(rect, 30f, 30f, cardPaint)
-            c.drawText(currentLevelUpOptions[i].description, rect.centerX(), rect.centerY(), cardText)
+            c.drawText(
+                currentLevelUpOptions[i].description,
+                rect.centerX(),
+                rect.centerY(),
+                cardText
+            )
         }
     }
 
@@ -645,7 +725,8 @@ class GameView @JvmOverloads constructor(
                     val x = event.x
                     val y = event.y
                     val leftRange = width / 6f..(width / 6f + width / 3f)
-                    val rightRange = (width / 2f + width / 12f)..(width / 2f + width / 12f + width / 3f)
+                    val rightRange =
+                        (width / 2f + width / 12f)..(width / 2f + width / 12f + width / 3f)
                     if (y in (height / 2f)..(height / 2f + 180f)) {
                         if (x in leftRange) chooseWeapon(option1)
                         else if (x in rightRange) chooseWeapon(option2)
@@ -653,9 +734,14 @@ class GameView @JvmOverloads constructor(
                 }
                 return true
             }
+
             GameState.PLAYING -> {
                 // [추가된 부분] 버튼 영역을 눌렀는지 먼저 확인
-                if (event.action == MotionEvent.ACTION_DOWN && pauseBtnRect.contains(event.x, event.y)) {
+                if (event.action == MotionEvent.ACTION_DOWN && pauseBtnRect.contains(
+                        event.x,
+                        event.y
+                    )
+                ) {
                     gameState = GameState.PAUSED
                     return true
                 }
@@ -664,6 +750,7 @@ class GameView @JvmOverloads constructor(
                 if (handled) performClick()
                 return handled || super.onTouchEvent(event)
             }
+
             GameState.LEVEL_UP -> {
                 if (event.action == MotionEvent.ACTION_DOWN) handleLevelUpTouch(event.x, event.y)
                 return true
@@ -699,6 +786,7 @@ class GameView @JvmOverloads constructor(
                     // 슬롯 1~5 선택
                     for (i in slotRects.indices) {
                         if (slotRects[i].contains(x, y)) {
+
                             // 1. 저장된 데이터가 있는지, 있다면 주인(userId)이 누구인지 확인
                             val json = pref.getString("save_slot_$i", null)
                             var canSave = true
@@ -711,29 +799,39 @@ class GameView @JvmOverloads constructor(
                                         canSave = false
                                     }
                                 } catch (e: Exception) {
-                                    // 데이터가 깨졌으면 그냥 덮어쓰기 허용 (선택 사항)
+                                    // 데이터 깨짐 → 덮어쓰기 허용
                                 }
                             }
 
-                            // 2. 저장 실행 또는 거부
                             if (canSave) {
-                                saveGame(i) // 내 슬롯이거나 빈 슬롯이면 저장
+                                saveGame(i)
                                 gameState = GameState.PAUSED
                             } else {
-                                // 남의 슬롯이면 경고 메시지
-                                android.widget.Toast.makeText(context, "다른 유저의 슬롯입니다! 덮어쓸 수 없습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "다른 유저의 슬롯입니다! 덮어쓸 수 없습니다.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
                             }
                             return true
                         }
                     }
 
-                    // 취소(뒤로가기) 버튼
+                    // 취소 버튼
                     if (backBtnRect.contains(x, y)) {
                         gameState = GameState.PAUSED
                     }
                 }
                 return true
             }
+
+            GameState.GAME_OVER -> {      // ← 正确独立分支
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    (context as? android.app.Activity)?.finish()
+                }
+                return true
+            }
+
 
         }
     }
@@ -851,10 +949,17 @@ class GameView @JvmOverloads constructor(
         "talisman" -> "부적"
         else       -> type
     }
-
     override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hgt: Int) {}
-    override fun surfaceDestroyed(h: SurfaceHolder) { running = false }
-}
+
+    override fun surfaceDestroyed(h: SurfaceHolder) {
+        running = false
+    }
+
+    // 置于类内部
+    fun isGameOver(): Boolean = (gameState == GameState.GAME_OVER)
+
+} // ← 注意这是 GameView 类的最终大括号
+
 
 // 저장할 데이터 구조체
 data class GameSaveData(

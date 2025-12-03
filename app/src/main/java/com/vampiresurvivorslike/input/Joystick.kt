@@ -31,7 +31,7 @@ class Joystick(
 
     /** 왼쪽 하단에 고정 위치 설정 */
     fun ensureBase(defaultW: Int, defaultH: Int) {
-        baseX = baseRadius + 60f                    // 여백 넉넉히
+        baseX = defaultW - (baseRadius + 60f)
         baseY = defaultH - (baseRadius + 60f)
         knobX = baseX
         knobY = baseY
