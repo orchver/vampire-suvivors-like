@@ -1,13 +1,17 @@
 package com.vampiresurvivorslike.weapons
 
-import android.graphics.*
-import com.vampiresurvivorslike.player.Player
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import com.vampiresurvivorslike.R
 import com.vampiresurvivorslike.enemy.EnemyBase
+import com.vampiresurvivorslike.player.Player
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-class Axe : Weapon {
+class Axe(context: Context) : Weapon {
 
     override var level: Int = 0
     override var baseDamage: Float = 20f
@@ -22,20 +26,13 @@ class Axe : Weapon {
     private var sweepPower = 13f
     private var lifestealRate = 0.10f
 
-    private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(120, 90, 60)
-        style = Paint.Style.STROKE
-        strokeWidth = 10f
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(180, 180, 190)
-        style = Paint.Style.FILL
-    }
-    private val headOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.DKGRAY
-        style = Paint.Style.STROKE
-        strokeWidth = 2f
+    private val bitmap: Bitmap
+
+    init {
+        val raw = BitmapFactory.decodeResource(context.resources, R.drawable.axe)
+        // 도끼 크기 조절 (좀 크게)
+        val size = 100
+        bitmap = Bitmap.createScaledBitmap(raw, size, size, true)
     }
 
     override fun update(player: Player, enemies: MutableList<EnemyBase>, nowMs: Long) {
@@ -67,12 +64,10 @@ class Axe : Weapon {
 
             val dx = e.x - centerX
             val dy = e.y - centerY
-
-            // ★ [충돌 판정] 스윕 반지름 + 적 반지름 안에 적이 있으면 피격
             val hitRange = sweepRadius + e.radius
 
             if (dx*dx + dy*dy <= hitRange * hitRange) {
-                val dead = e.takeDamage(dmg)
+                e.takeDamage(dmg)
                 val ang = atan2(dy, dx)
                 e.knockback(cos(ang).toFloat(), sin(ang).toFloat(), sweepPower)
                 player.heal(dmg * lifestealRate)
@@ -85,30 +80,23 @@ class Axe : Weapon {
     }
 
     override fun draw(canvas: Canvas, px: Float, py: Float) {
+        // 도끼 머리 위치 계산
         val dirX = cos(sweepAngle)
         val dirY = sin(sweepAngle)
         val headX = px + dirX * sweepRadius
         val headY = py + dirY * sweepRadius
 
-        canvas.drawLine(px, py, headX, headY, handlePaint)
-
         canvas.save()
+
+        // 1. 도끼 위치로 이동
         canvas.translate(headX, headY)
-        canvas.rotate(Math.toDegrees(sweepAngle.toDouble()).toFloat())
 
-        val w = 36f; val h = 26f
-        val rect = RectF(-w*0.2f, -h, w, h)
-        canvas.drawOval(rect, headPaint)
-        canvas.drawOval(rect, headOutline)
+        // 2. 회전 (스윙 각도 + 90도 정도 더해서 날이 밖을 보게)
+        val deg = Math.toDegrees(sweepAngle.toDouble()).toFloat() + 45f
+        canvas.rotate(deg)
 
-        val path = Path().apply {
-            moveTo(w, 0f)
-            lineTo(w - 10f, -h*0.6f)
-            lineTo(w - 10f, h*0.6f)
-            close()
-        }
-        canvas.drawPath(path, headPaint)
-        canvas.drawPath(path, headOutline)
+        // 3. 그리기 (중심점 잡기)
+        canvas.drawBitmap(bitmap, -bitmap.width / 2f, -bitmap.height / 2f, null)
 
         canvas.restore()
     }

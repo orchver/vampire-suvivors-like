@@ -1,97 +1,123 @@
 package com.vampiresurvivorslike.player
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import com.vampiresurvivorslike.R
+import com.vampiresurvivorslike.weapons.Weapon
 
-class Player(var weapon: com.vampiresurvivorslike.weapons.Weapon) {
+class Player(context: Context, var weapon: Weapon) {
 
     var x = 0f
     var y = 0f
-    val radius = 24f
-    //적에게 피격시 무적, 없으면 바로 죽어버림
+    val radius = 24f // 히트박스 크기는 유지 (게임 밸런스 위해)
+
+    // 🔹 그래픽 관련 변수
+    private var idleBitmap: Bitmap
+    private var walkBitmap: Bitmap
+    private var isMoving: Boolean = false
+    private var facingRight: Boolean = true
+
+    // ⭐ [수정] 이미지 확대 배율 (3배)
+    private val visualScale = 3.0f
+    private var bitmapSize = 0
+
+    // 무적 관련
     private var isInvincible = false
     private var invincibleTimer = 0f
     private val INVINCIBILITY_DURATION = 0.5f
 
-    // ─ 체력 시스템 ─
+    // ─ 체력 및 스탯 (기존 변수명 100% 유지) ─
     var maxHp = 100f
     var hp = 100f
+    var moveSpeed = 260f // BossEnemy와 호환되는 변수명
 
-    // ─ 이동 속도 (기본값, 필요하면 나중에 패시브로 업그레이드 가능) ─
-    var moveSpeed = 260f
-
-    // ─ 레벨 / 경험치 시스템 ─
     var level: Int = 1
     var exp: Int = 0
-    var expToNext: Int = 200      // 레벨업 필요 경험치 (레벨업마다 2배)
+    var expToNext: Int = 200
 
-    // GameView 에서 넣어주는 콜백: "레벨업이 발생했을 때" 호출
     var onLevelUp: (() -> Unit)? = null
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.CYAN }
+    init {
+        // 1. 이미지 로드
+        val rawIdle = BitmapFactory.decodeResource(context.resources, R.drawable.player_idle)
+        val rawWalk = BitmapFactory.decodeResource(context.resources, R.drawable.player_walk)
 
-    // 조이스틱으로 이동
+        // 2. 프레임 자르기
+        val idleW = rawIdle.width / 5
+        val walkW = rawWalk.width / 6
+
+        val cropIdle = Bitmap.createBitmap(rawIdle, 0, 0, idleW, rawIdle.height)
+        val cropWalk = Bitmap.createBitmap(rawWalk, 0, 0, walkW, rawWalk.height)
+
+        // 3. ⭐ 크기 3배로 설정
+        // 히트박스(radius*2) 기준 3배 크기로 비트맵 생성
+        bitmapSize = (radius * 2 * visualScale).toInt()
+
+        idleBitmap = Bitmap.createScaledBitmap(cropIdle, bitmapSize, bitmapSize, true)
+        walkBitmap = Bitmap.createScaledBitmap(cropWalk, bitmapSize, bitmapSize, true)
+    }
+
+    // 조이스틱 업데이트
     fun updateByJoystick(ax: Float, ay: Float, dtSec: Float, w: Int, h: Int) {
+        isMoving = (ax != 0f || ay != 0f)
+        if (ax < 0) facingRight = false
+        else if (ax > 0) facingRight = true
+
         x = (x + ax * moveSpeed * dtSec).coerceIn(radius, w - radius)
         y = (y + ay * moveSpeed * dtSec).coerceIn(radius, h - radius)
     }
 
     fun draw(canvas: Canvas) {
-        canvas.drawCircle(x, y, radius, paint)
+        val bitmap = if (isMoving) walkBitmap else idleBitmap
+
+        canvas.save()
+
+        // 좌우 반전
+        if (!facingRight) {
+            canvas.scale(-1f, 1f, x, y)
+        }
+
+        // ⭐ [중요] 이미지가 3배 커졌으므로, 중심점을 다시 맞춰줍니다.
+        canvas.drawBitmap(bitmap, x - bitmapSize / 2f, y - bitmapSize / 2f, null)
+
+        canvas.restore()
     }
 
-    // 체력 회복
+    // ─ 이하 기존 로직 그대로 유지 ─
     fun heal(amount: Float) {
         hp = (hp + amount).coerceAtMost(maxHp)
     }
 
-    /** ★ 경험치 증가 + 레벨업 처리 (여기서는 무기 업그레이드 안 함!)
-     *
-     *  요구사항:
-     *  - 일정 경험치 이상 획득 시: 게임 일시정지 + 3가지 업그레이드 중 택1
-     *  - 레벨업 시: 최대체력 25 증가, 잃은 체력의 75% 회복(정수 내림)
-     *  - 무기 업그레이드는 GameView에서 "선택한 옵션"으로 처리
-     */
     fun gainExp(amount: Int) {
         exp += amount
         while (exp >= expToNext) {
             exp -= expToNext
             level += 1
-            expToNext *= 2      // 레벨업마다 필요 경험치 2배
-
-            // 1) 최대 체력 25 증가
+            expToNext *= 2
             maxHp += 25f
-
-            // 2) 잃은 체력의 75% 회복 (정수 내림)
             val missing = maxHp - hp
             val healInt = (missing * 0.75f).toInt()
             hp += healInt
             if (hp > maxHp) hp = maxHp
-
-            // 3) 무기 업그레이드는 여기서 하지 않고,
-            //    GameView의 레벨업 선택 UI에서 어떤 무기를 올릴지 결정
             onLevelUp?.invoke()
         }
     }
-    //  매 프레임 무적 시간을 깎아주는 함수
+
     fun updateTimer(dt: Float) {
         if (isInvincible) {
             invincibleTimer -= dt
-            if (invincibleTimer <= 0f) {
-                isInvincible = false
-            }
+            if (invincibleTimer <= 0f) isInvincible = false
         }
     }
 
-    //  적이 호출할 데미지 함수
     fun takeDamage(amount: Float) {
-        if (isInvincible) return // 무적이면 무시
-
+        if (isInvincible) return
         hp -= amount
         if (hp < 0) hp = 0f
-
-        // 피격 시 무적 발동
         isInvincible = true
         invincibleTimer = INVINCIBILITY_DURATION
     }

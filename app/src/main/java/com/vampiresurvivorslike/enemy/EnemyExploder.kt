@@ -1,34 +1,49 @@
 package com.vampiresurvivorslike.enemy
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import com.vampiresurvivorslike.R
 import com.vampiresurvivorslike.player.Player
 import kotlin.math.hypot
 
 class EnemyExploder(
+    context: Context, // [추가] 이미지 로딩용
     startX: Float,
     startY: Float,
-    multiplier: Float, // ★ 시간 비례 배율 다시 추가
+    multiplier: Float,
     val player: Player
 ) : EnemyBase(
     x = startX,
     y = startY,
-    hp = 20,                         // ★ [고정] 체력은 언제나 20 (스치면 사망)
-    atk = (30 * multiplier).toInt(), // ★ [변동] 공격력은 시간 비례 증가
+    hp = 20,
+    atk = (30 * multiplier).toInt(),
     moveSpeed = 230f,
-    expReward = (15 * multiplier).toInt(), // ★ [변동] 경험치도 시간 비례 증가
+    expReward = (15 * multiplier).toInt(),
     radius = 20f
 ) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.BLACK
-    }
-
+    private val bitmap: Bitmap
     private val explosionRadius = 100f
     private var hasExploded = false
 
+    init {
+        // 1. 이미지 로드 (enemy_exploder)
+        val raw = BitmapFactory.decodeResource(context.resources, R.drawable.enemy_exploder)
+
+        // 2. 스프라이트 시트 첫 프레임 자르기 (4등분)
+        val fw = raw.width / 4
+        val fh = raw.height
+        val crop = Bitmap.createBitmap(raw, 0, 0, fw, fh)
+
+        // 3. 크기 조절
+        val size = (radius * 2*6).toInt()
+        bitmap = Bitmap.createScaledBitmap(crop, size, size, true)
+    }
+
     override fun draw(c: Canvas) {
-        c.drawCircle(x, y, radius, paint)
+        // 비트맵 그리기
+        c.drawBitmap(bitmap, x - radius, y - radius, null)
     }
 
     override fun update(dt: Float, targetX: Float, targetY: Float) {

@@ -1,6 +1,8 @@
 package com.vampiresurvivorslike.enemy
 
+import android.content.Context
 import android.graphics.*
+import com.vampiresurvivorslike.R
 import com.vampiresurvivorslike.player.Player
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -8,6 +10,7 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 class BossEnemy(
+    context: Context, // [추가] 이미지 로딩용
     startX: Float,
     startY: Float,
     val player: Player,
@@ -22,10 +25,37 @@ class BossEnemy(
     expReward = 50000,
     radius = 60f
 ) {
+    // ──────── [비트맵 리소스] ────────
+    private val swordBitmap: Bitmap
+    private val arrowBitmap: Bitmap
+    private val talismanBitmap: Bitmap
+    private val bodyBitmap: Bitmap // 보스 본체 (EnemyStalker 재활용하거나 별도 이미지)
+
+    init {
+        // 1. 검 이미지
+        val rawSword = BitmapFactory.decodeResource(context.resources, R.drawable.sword)
+        swordBitmap = Bitmap.createScaledBitmap(rawSword, 120, 120, true)
+
+        // 2. 화살 이미지
+        val rawArrow = BitmapFactory.decodeResource(context.resources, R.drawable.arrow)
+        arrowBitmap = Bitmap.createScaledBitmap(rawArrow, 30, 80, true)
+
+        // 3. 부적 이미지
+        val rawTalisman = BitmapFactory.decodeResource(context.resources, R.drawable.talisman)
+        talismanBitmap = Bitmap.createScaledBitmap(rawTalisman, 40, 40, true)
+
+        // 4. 보스 본체 (일단 Stalker 이미지 3배 뻥튀기해서 사용, 전용 이미지 있으면 교체)
+        // 없으면 기본 원으로 대체되도록 예외처리 가능하지만, 여기선 stalker 리소스 활용
+        val rawBody = BitmapFactory.decodeResource(context.resources, R.drawable.enemy_stalker)
+        // 4열 1행 중 첫번째 컷
+        val fw = rawBody.width / 4
+        val cropBody = Bitmap.createBitmap(rawBody, 0, 0, fw, rawBody.height)
+        // 보스니까 아주 크게 (지름 120 * 2.5배)
+        bodyBitmap = Bitmap.createScaledBitmap(cropBody, 300, 300, true)
+    }
+
     // ──────── [상태 변수] ────────
     private var slowTimer = 0f
-
-    // 속도 배율 (피격 시 40% 감속)
     private val baseSpeedMult = 1.2f
     private val slowedSpeedMult = baseSpeedMult * 0.6f
 
@@ -37,21 +67,25 @@ class BossEnemy(
     private var aimAngle = 0f
     private var dashDuration = 0f
 
+    // 조준선 페인트 (이건 이미지가 애매해서 점선 유지)
+    private val aimLinePaint = Paint().apply {
+        color = Color.parseColor("#80FF0000")
+        strokeWidth = 6f
+        pathEffect = DashPathEffect(floatArrayOf(30f, 20f), 0f)
+        style = Paint.Style.STROKE
+    }
+
     // ──────── [무기 1: 검 (Sword)] ────────
-    // 요구사항: 1개의 검이 두배 커지고 데미지도 2배
-    private val swordCount = 1         // ★ [수정] 개수는 1개
-    private val swordScale = 2.0f      // ★ [수정] 크기 2배 (보라색 3단계)
-    private val swordDmg = 25f * 2.0f  // ★ [수정] 데미지 2배 (보라색 3단계)
+    private val swordCount = 1
+    private val swordScale = 2.0f
+    private val swordDmg = 25f * 2.0f
     private val swordRadius = 100f
     private var swordAngleAccum = 0f
     private val swordAngularSpeed = (Math.PI * 2 / 1.0).toFloat()
 
     // ──────── [무기 2: 활 (Bow)] ────────
-    // 요구사항: 투사체 5개, 치명타 100% + 피해량 900%
-    private val arrowCount = 5         // ★ [수정] 요청하신 대로 5개 설정
-    // 기본 데미지(10) * 9.0배 (치명타 배율)
+    private val arrowCount = 5
     private val arrowFinalDmg = 10f * 9.0f
-
     private var bowTimer = 0f
     private val bowInterval = 2.5f
     private val arrowSpeed = 420f
@@ -61,12 +95,9 @@ class BossEnemy(
     private val bossArrows = mutableListOf<BossArrow>()
 
     // ──────── [무기 3: 부적 (Talisman)] ────────
-    // 요구사항: 투사체 개수 12개 (보라색 3단계)
-    // 폭발 범위/피해량 증가는 노란색 옵션이므로 적용 X (기본값 사용)
-    private val talismanCount = 12     // ★ [수정] 개수 12개 (보라색 3단계)
-    private val talismanDmg = 15f      // 기본 데미지 (증가 없음)
-    private val explosionRadius = 100f // 기본 폭발 범위
-
+    private val talismanCount = 12
+    private val talismanDmg = 15f
+    private val explosionRadius = 100f
     private var talismanTimer = 0f
     private val talismanInterval = 4.0f
     private val talismanSpeed = 200f
@@ -75,20 +106,6 @@ class BossEnemy(
 
     private data class BossOrb(var x: Float, var y: Float, var vx: Float, var vy: Float, var lifeTime: Float = 0f)
     private val bossOrbs = mutableListOf<BossOrb>()
-
-    // ──────── [그리기 도구] ────────
-    private val bodyPaint = Paint().apply { color = Color.RED }
-    private val aimLinePaint = Paint().apply {
-        color = Color.parseColor("#80FF0000")
-        strokeWidth = 6f
-        pathEffect = DashPathEffect(floatArrayOf(30f, 20f), 0f)
-        style = Paint.Style.STROKE
-    }
-    private val bladePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(230, 230, 235); style = Paint.Style.FILL }
-    private val guardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(140, 120, 80); style = Paint.Style.FILL }
-    private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.DKGRAY; style = Paint.Style.STROKE; strokeWidth = 2f }
-    private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.YELLOW }
-    private val orbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.CYAN }
 
     override fun update(dt: Float, targetX: Float, targetY: Float) {
         updateSword(dt)
@@ -106,7 +123,7 @@ class BossEnemy(
 
     private fun updateChaseLogic(dt: Float) {
         val speedMult = if (slowTimer > 0f) slowedSpeedMult else baseSpeedMult
-        val actualSpeed = player.moveSpeed * speedMult
+        val actualSpeed = player.moveSpeed * speedMult // moveSpeed -> player.moveSpeed 확인 필요 (Player 변수명)
 
         val dx = player.x - x
         val dy = player.y - y
@@ -144,13 +161,11 @@ class BossEnemy(
 
         for (i in 0 until swordCount) {
             val ang = swordAngleAccum + step * i
-            // swordScale이 적용된 반지름 위치 계산
             val currentRadius = swordRadius + (16f * swordScale)
             val sx = x + cos(ang) * currentRadius
             val sy = y + sin(ang) * currentRadius
 
             val dist = hypot(player.x - sx, player.y - sy)
-            // 검 크기에 따른 충돌 범위 증가
             val hitRange = (18f * swordScale) + player.radius
 
             if (dist <= hitRange) {
@@ -206,7 +221,6 @@ class BossEnemy(
             val o = iterator.next()
             o.lifeTime += dt
 
-            // 2초 뒤 폭발 (범위 데미지)
             if (o.lifeTime >= talismanLifeMax) {
                 if (hypot(player.x - o.x, player.y - o.y) <= explosionRadius + player.radius) {
                     player.takeDamage(talismanDmg)
@@ -215,7 +229,6 @@ class BossEnemy(
                 continue
             }
 
-            // 유도 로직
             val dx = player.x - o.x
             val dy = player.y - o.y
             val d = hypot(dx, dy).coerceAtLeast(1e-3f)
@@ -232,7 +245,6 @@ class BossEnemy(
             o.x += o.vx * dt
             o.y += o.vy * dt
 
-            // 직접 충돌 시 데미지
             if (hypot(player.x - o.x, player.y - o.y) <= 8f + player.radius) {
                 player.takeDamage(talismanDmg)
                 iterator.remove()
@@ -268,24 +280,44 @@ class BossEnemy(
     }
 
     override fun draw(canvas: Canvas) {
+        // 1. 조준선
         if (dashState == DashState.AIMING) {
             val endX = x + cos(aimAngle) * 2000f
             val endY = y + sin(aimAngle) * 2000f
             canvas.drawLine(x, y, endX, endY, aimLinePaint)
         }
 
+        // 2. 검 그리기 (이미지 회전)
         drawSwords(canvas)
-        for (a in bossArrows) canvas.drawCircle(a.x, a.y, 6f, arrowPaint)
-        for (o in bossOrbs) canvas.drawCircle(o.x, o.y, 8f, orbPaint)
-        canvas.drawCircle(x, y, radius, bodyPaint)
+
+        // 3. 화살 그리기
+        for (a in bossArrows) {
+            canvas.save()
+            canvas.translate(a.x, a.y)
+            // 진행 방향으로 회전
+            val angle = Math.toDegrees(atan2(a.vy.toDouble(), a.vx.toDouble())).toFloat()
+            canvas.rotate(angle + 90f) // 화살 이미지가 위쪽을 보고 있다고 가정
+            canvas.drawBitmap(arrowBitmap, -arrowBitmap.width/2f, -arrowBitmap.height/2f, null)
+            canvas.restore()
+        }
+
+        // 4. 부적 그리기 (빙글빙글 회전 효과)
+        val spin = (System.currentTimeMillis() % 1000) / 1000f * 360f
+        for (o in bossOrbs) {
+            canvas.save()
+            canvas.translate(o.x, o.y)
+            canvas.rotate(spin)
+            canvas.drawBitmap(talismanBitmap, -talismanBitmap.width/2f, -talismanBitmap.height/2f, null)
+            canvas.restore()
+        }
+
+        // 5. 보스 본체 그리기
+        // 피격 시 색상 변경 효과는 PorterDuffColorFilter 등으로 구현 가능하지만 여기선 생략
+        canvas.drawBitmap(bodyBitmap, x - bodyBitmap.width/2f, y - bodyBitmap.height/2f, null)
     }
 
     private fun drawSwords(c: Canvas) {
         val step = (Math.PI * 2 / swordCount).toFloat()
-        val bladeLen = 80f * swordScale
-        val bladeWid = 20f * swordScale
-        val guardWid = 30f * swordScale
-        val handleLen = 20f * swordScale
 
         for (i in 0 until swordCount) {
             val ang = swordAngleAccum + step * i
@@ -296,23 +328,14 @@ class BossEnemy(
             c.translate(cx, cy)
             c.rotate(Math.toDegrees(ang.toDouble()).toFloat())
 
-            val handle = RectF(-handleLen, -bladeWid * 0.5f, 0f, bladeWid * 0.5f)
-            c.drawRoundRect(handle, 4f, 4f, guardPaint)
-            c.drawRoundRect(handle, 4f, 4f, outlinePaint)
-            val guard = RectF(-2f, -guardWid * 0.5f, 2f, guardWid * 0.5f)
-            c.drawRect(guard, guardPaint)
-            c.drawRect(guard, outlinePaint)
-            val blade = RectF(0f, -bladeWid * 0.5f, bladeLen, bladeWid * 0.5f)
-            c.drawRoundRect(blade, 3f, 3f, bladePaint)
-            c.drawRoundRect(blade, 3f, 3f, outlinePaint)
-            val path = Path().apply {
-                moveTo(bladeLen, 0f)
-                lineTo(bladeLen - 6f, -bladeWid * 0.5f)
-                lineTo(bladeLen - 6f, bladeWid * 0.5f)
-                close()
-            }
-            c.drawPath(path, bladePaint)
-            c.drawPath(path, outlinePaint)
+            // 크기 스케일
+            c.scale(swordScale, swordScale)
+
+            // 검 회전 (우상향 이미지 가정 +45도)
+            c.rotate(45f)
+
+            // 이미지 그리기
+            c.drawBitmap(swordBitmap, -20f, -swordBitmap.height/2f, null)
             c.restore()
         }
     }

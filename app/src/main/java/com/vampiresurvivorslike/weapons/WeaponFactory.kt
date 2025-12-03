@@ -1,14 +1,20 @@
 package com.vampiresurvivorslike.weapons
 
+import android.content.Context
+
 object WeaponFactory {
-    fun createWeapon(type: String): Weapon {
+
+    // [수정] context 인자 추가 -> 각 무기 생성자에 전달
+    fun createWeapon(context: Context, type: String): Weapon {
         return when (type.lowercase()) {
-            "sword" -> Sword()
-            "axe" -> Axe()
-            "bow" -> Bow()
-            "talisman" -> Talisman()
-            else -> Sword()
+            "sword" -> Sword(context)
+            "axe" -> Axe(context)
+            "bow" -> Bow(context)
+            "talisman" -> Talisman(context)
+            else -> Sword(context)
         }
     }
-    fun createDefault(): Weapon = Sword()
+
+    // [수정] context 인자 추가
+    fun createDefault(context: Context): Weapon = Sword(context)
 }

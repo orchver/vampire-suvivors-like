@@ -13,19 +13,23 @@ import com.vampiresurvivorslike.player.Player
 import com.vampiresurvivorslike.weapons.*
 import kotlin.random.Random
 
-//Gson 관련 import 추가
+// Gson 관련 import
 import android.content.SharedPreferences
 import com.google.gson.Gson
-
 
 class GameView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback, Runnable {
 
-
     // [추가] 현재 로그인한 유저 ID (기본값은 guest)
     var currentUserId: String = "guest"
+
+    // 🔹 타이머 & 경험치 바
+    // 🚨 [수정] 중복 선언된 변수들 정리 (하나만 남김)
+    private var gameStartMs: Long = 0L          // 게임 시작시간
+    private var elapsedMs: Long = 0L           // 게임 지난시간
+    private val maxTimeMs = 8 * 60 * 1000L     // 8분
 
     // 진행상황 저장 기능
     fun saveGame(slotIndex: Int = -1) {
@@ -59,15 +63,11 @@ class GameView @JvmOverloads constructor(
             weapons = weaponSaveList
         )
 
-        // 3. JSON 변환 및 SharedPreferences 저장 (키값을 동적으로 변경)
+        // 3. JSON 변환 및 SharedPreferences 저장
         val gson = Gson()
         val jsonString = gson.toJson(saveData)
 
-        // slotIndex가 -1이면 "save_auto", 아니면 "save_slot_번호"
-        val fileName = if (slotIndex == -1) "save_auto" else "save_slot_$slotIndex"
-
         val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
-        // "save_slot_0", "save_slot_1" ... 식으로 저장됨
         pref.edit().putString("save_slot_$slotIndex", jsonString).apply()
 
         if (slotIndex != -1) {
@@ -82,7 +82,6 @@ class GameView @JvmOverloads constructor(
     }
 
     // 진행상황 로드 기능
-
     fun loadGame(slotIndex: Int = 0): Boolean {
         val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
         val fileName = "save_slot_$slotIndex"
@@ -102,7 +101,8 @@ class GameView @JvmOverloads constructor(
             weapons.clear()
             if (data.weapons.isNotEmpty()) {
                 for (info in data.weapons) {
-                    val newWeapon = WeaponFactory.createWeapon(info.type)
+                    // 🚨 [수정] WeaponFactory에 context 전달
+                    val newWeapon = WeaponFactory.createWeapon(context, info.type)
                     // 레벨만큼 강화 반복
                     repeat(info.level) {
                         newWeapon.upgrade()
@@ -110,11 +110,13 @@ class GameView @JvmOverloads constructor(
                     weapons.add(newWeapon)
                 }
             } else {
-                weapons.add(WeaponFactory.createWeapon("sword"))
+                // 🚨 [수정] WeaponFactory에 context 전달
+                weapons.add(WeaponFactory.createWeapon(context, "sword"))
             }
 
             // 3. 플레이어 복구
-            val restoredPlayer = Player(weapons[0])
+            // 🚨 [수정] Player 생성자에 context 전달
+            val restoredPlayer = Player(context, weapons[0])
             restoredPlayer.apply {
                 hp = data.playerHp
                 maxHp = data.playerMaxHp
@@ -139,7 +141,6 @@ class GameView @JvmOverloads constructor(
 
             // 4. 적 및 아이템 초기화
             enemyManager.enemies.clear()
-
             expOrbs.clear()
 
             // 5. 상태 변경
@@ -152,13 +153,7 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-
-    // 🔹 타이머 & 경험치 바
-    private var gameStartMs: Long = 0L          // 게임 시작시간
-    private var elapsedMs: Long = 0L           // 게임 지난시간
-    private val maxTimeMs = 8 * 60 * 1000L     // 8분
-
-    // 🔹 HUD용 페인트들 (Code 2에서 가져옴)
+    // 🔹 HUD용 페인트들
     private val timerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 48f
@@ -190,7 +185,7 @@ class GameView @JvmOverloads constructor(
         strokeWidth = 3f
     }
 
-    // 적 숫자 표시용 (Code 2 style)
+    // 적 숫자 표시용
     private val hudTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 36f
@@ -227,8 +222,8 @@ class GameView @JvmOverloads constructor(
 
     private val bg = Paint().apply { color = Color.BLACK }
 
-    // 🚩 [기반] EnemyManager 사용 (1번 코드 기준)
-    private val enemyManager = EnemyManager()
+    // 🚩 [기반] EnemyManager 사용
+    private val enemyManager = EnemyManager(context)
 
     private var player: Player? = null
     private val weapons = mutableListOf<Weapon>()
@@ -308,20 +303,20 @@ class GameView @JvmOverloads constructor(
                 p.updateByJoystick(joystick.axisX, joystick.axisY, dtSec, width, height)
                 p.updateTimer(dtSec)
 
-                // 2. 🚩 [기반] 적 이동 및 스폰 (EnemyManager에게 위임)
+                // 2. 🚩 [기반] 적 이동 및 스폰
                 enemyManager.updateAll(dtSec, p.x, p.y, totalGameTime, p, width, height)
 
                 // 충돌 검사
                 enemyManager.checkCollisions(p)
 
-                // 3. 타이머 갱신 (Code 2 로직 이식)
+                // 3. 타이머 갱신
                 val nowMs = System.currentTimeMillis()
                 if (gameStartMs != 0L) {
                     val diff = nowMs - gameStartMs
                     elapsedMs = diff.coerceAtMost(maxTimeMs)
                 }
 
-                // 4. 무기 업데이트 (enemyManager 리스트 전달)
+                // 4. 무기 업데이트
                 for (w in weapons) {
                     w.update(p, enemyManager.enemies, nowMs)
                 }
@@ -330,16 +325,14 @@ class GameView @JvmOverloads constructor(
                 val itE = enemyManager.enemies.iterator()
                 while (itE.hasNext()) {
                     val e = itE.next()
-                    // isAlive가 없으면 hp <= 0으로 체크, 있으면 isAlive 사용
-                    // 여기서는 안전하게 hp 체크로 대체 가능하거나 1번 코드의 !e.isAlive 사용
                     if (!e.isAlive) {
-                        expOrbs += ExpOrb(e.x, e.y, 10) // expReward가 있으면 e.expReward 사용
+                        expOrbs += ExpOrb(e.x, e.y, 10)
                         itE.remove()
                     }
                 }
 
-                // 6. 🚩 [이식] 강력한 자석 효과 (Code 2 버전)
-                val magnetRadius = 3000f // 1번 코드는 300f였으나 2번 코드의 3000f로 복구
+                // 6. 🚩 [이식] 강력한 자석 효과
+                val magnetRadius = 3000f
                 val magnetSpeed = 500f
 
                 for (orb in expOrbs) {
@@ -369,15 +362,10 @@ class GameView @JvmOverloads constructor(
                     }
                 }
             }
-
             GameState.LEVEL_UP -> {}
-
             GameState.PAUSED -> {}
-
             GameState.SAVE_SELECT -> {}
-
             GameState.GAME_OVER -> { }
-
         }
     }
 
@@ -389,8 +377,8 @@ class GameView @JvmOverloads constructor(
                 GameState.SELECT_WEAPON -> drawWeaponSelectScreen(c)
                 GameState.PLAYING -> drawGamePlay(c)
                 GameState.LEVEL_UP -> drawLevelUpScreen(c)
-                GameState.PAUSED -> drawPauseMenu(c)       // 새로 추가
-                GameState.SAVE_SELECT -> drawSaveSelectScreen(c) // 새로 추가
+                GameState.PAUSED -> drawPauseMenu(c)
+                GameState.SAVE_SELECT -> drawSaveSelectScreen(c)
                 GameState.GAME_OVER -> drawGameOverScreen(c)
             }
         } finally {
@@ -428,24 +416,18 @@ class GameView @JvmOverloads constructor(
     private fun drawGamePlay(c: Canvas) {
         val p = player
 
-        // 적 그리기 (Manager 이용)
         enemyManager.enemies.forEach { it.draw(c) }
-
         expOrbs.forEach { it.draw(c) }
 
         if (p != null) {
             p.draw(c)
             weapons.forEach { it.draw(c, p.x, p.y) }
-
-            // 🚩 [이식] HUD 그리기 (Code 2)
             drawHUD(c)
         }
 
         joystick.draw(c)
     }
 
-    // 🚩 [이식] Code 2의 HUD (타이머, HP바, EXP바, 무기레벨)
-    // 일시정지 메뉴 그리기 (재개, 저장, 나가기)
     private fun drawPauseMenu(c: Canvas) {
         // 반투명 검은 배경
         c.drawColor(Color.argb(150, 0, 0, 0))
@@ -464,7 +446,7 @@ class GameView @JvmOverloads constructor(
             val cx = width / 2f
             val cy = startY + i * (btnH + gap) + btnH / 2f
             val rect = RectF(cx - btnW / 2, cy - btnH / 2, cx + btnW / 2, cy + btnH / 2)
-            menuRects[i] = rect // 터치 처리를 위해 저장
+            menuRects[i] = rect
 
             c.drawRoundRect(rect, 20f, 20f, rectPaint)
 
@@ -474,19 +456,15 @@ class GameView @JvmOverloads constructor(
         }
     }
 
-    // 게임 오버 화면
     private fun drawGameOverScreen(c: Canvas) {
-
         c.drawColor(Color.argb(200, 0, 0, 0))
 
-        // GAME OVER
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             textSize = 80f
             textAlign = Paint.Align.CENTER
         }
         c.drawText("GAME OVER", width / 2f, height / 3f, titlePaint)
-
 
         val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.LTGRAY
@@ -508,11 +486,8 @@ class GameView @JvmOverloads constructor(
         c.drawText("화면을 터치하면 타이틀로 돌아갑니다", width / 2f, height * 0.7f, infoPaint)
     }
 
-    // 저장 슬롯 선택 화면 그리기 (1~5번 슬롯)
-    // GameView.kt 내부 drawSaveSelectScreen 함수
-
     private fun drawSaveSelectScreen(c: Canvas) {
-        c.drawColor(Color.argb(220, 0, 0, 0)) // 배경
+        c.drawColor(Color.argb(220, 0, 0, 0))
 
         val titlePaint =
             Paint().apply { color = Color.WHITE; textSize = 60f; textAlign = Paint.Align.CENTER }
@@ -527,7 +502,6 @@ class GameView @JvmOverloads constructor(
         val lockedPaint =
             Paint().apply { color = Color.RED; style = Paint.Style.STROKE; strokeWidth = 5f }
 
-        // 텍스트 스타일 정의
         val mainTextPaint =
             Paint().apply { color = Color.WHITE; textSize = 36f; textAlign = Paint.Align.CENTER }
         val subTextPaint =
@@ -551,18 +525,12 @@ class GameView @JvmOverloads constructor(
             if (json != null) {
                 try {
                     val data = gson.fromJson(json, GameSaveData::class.java)
-
-                    // 유저이름 / 플레이 날짜 / 진행상태
-                    // 한 줄에 다 넣으면 길어서 두 줄로 나눔
-                    // 위쪽: 유저ID / 날짜
                     val infoText = "${data.userId} / ${data.saveDate}"
-                    // 아래쪽: 레벨 (경과 시간)
                     val progressText = "Lv.${data.playerLevel} (${formatTime(data.elapsedMs)})"
 
                     c.drawText(infoText, cx, cy - 15f, mainTextPaint)
                     c.drawText(progressText, cx, cy + 35f, subTextPaint)
 
-                    // 다른 유저의 데이터면 빨간 테두리 표시 (내용은 보여줌)
                     if (data.userId != currentUserId) {
                         c.drawRoundRect(rect, 20f, 20f, lockedPaint)
                     }
@@ -570,30 +538,24 @@ class GameView @JvmOverloads constructor(
                     c.drawText("데이터 오류", cx, cy + 10f, emptyTextPaint)
                 }
             } else {
-                // 빈 슬롯일 때는 심플하게 번호만 표시
                 c.drawText("슬롯 ${i + 1}", cx, cy + 15f, emptyTextPaint)
             }
         }
 
-        // 뒤로가기 버튼
         backBtnRect.set(width / 2f - 100f, height - 150f, width / 2f + 100f, height - 50f)
         val backPaint = Paint().apply { color = Color.RED }
         c.drawRoundRect(backBtnRect, 20f, 20f, backPaint)
         c.drawText("취소", backBtnRect.centerX(), backBtnRect.centerY() + 15f, mainTextPaint)
     }
 
-    // 시간 포맷용 보조 함수
     private fun formatTime(ms: Long): String {
         val sec = ms / 1000
         return "${sec / 60}:${String.format("%02d", sec % 60)}"
     }
 
-
-    /** 🔹 HUD (기획서 5번 화면) 그리기 */
     private fun drawHUD(c: Canvas) {
         val p = player ?: return
 
-        // 1) 경과 시간
         val secTotal = (elapsedMs / 1000).toInt()
         val min = secTotal / 60
         val sec = secTotal % 60
@@ -602,7 +564,6 @@ class GameView @JvmOverloads constructor(
         timerPaint.color = if (elapsedMs >= 7 * 60 * 1000L) Color.RED else Color.WHITE
         c.drawText(timeStr, width / 2f, 60f, timerPaint)
 
-        // 2) 경험치 바
         val barLeft = 40f
         val barRight = width - 40f
         val expTop = 80f
@@ -618,7 +579,6 @@ class GameView @JvmOverloads constructor(
             expBarPaint
         )
 
-        // 3) 체력 바
         val hpTop = expTop + 40f
         c.drawRect(barLeft, hpTop, barRight, hpTop + barHeight, barBgPaint)
         val hpRatio = (p.hp / p.maxHp).coerceIn(0f, 1f)
@@ -630,7 +590,6 @@ class GameView @JvmOverloads constructor(
             hpBarPaint
         )
 
-        // 4) 무기 업그레이드 표시
         val startX = 40f
         var y = hpTop + 80f
         val gapY = 40f
@@ -655,25 +614,21 @@ class GameView @JvmOverloads constructor(
         drawRow("부적", getWeaponLevel<Talisman>())
 
 
-        // 6) 우측 상단 일시정지 버튼 (|| 모양)
         val btnSize = 80f
         val margin = 20f
         pauseBtnRect.set(width - btnSize - margin, margin, width - margin, margin + btnSize)
 
-        // 버튼 배경
         val btnPaint = Paint().apply { color = Color.DKGRAY; style = Paint.Style.FILL }
         c.drawRoundRect(pauseBtnRect, 10f, 10f, btnPaint)
 
-        // || 모양 텍스트
         val textPaint =
             Paint().apply { color = Color.WHITE; textSize = 50f; textAlign = Paint.Align.CENTER }
-        // 텍스트 수직 중앙 정렬 보정
         val fontMetrics = textPaint.fontMetrics
         val baseline = pauseBtnRect.centerY() - (fontMetrics.descent + fontMetrics.ascent) / 2
         c.drawText("||", pauseBtnRect.centerX(), baseline, textPaint)
+        c.drawText("ENEMY: ${enemyManager.enemies.size}", 24f, hpTop + barHeight + 120f, hudTextPaint)
     }
 
-    // HUD용 헬퍼 함수
     private inline fun <reified T : Weapon> getWeaponLevel(): Int {
         for (w in weapons) {
             if (w is T) return w.level
@@ -736,12 +691,7 @@ class GameView @JvmOverloads constructor(
             }
 
             GameState.PLAYING -> {
-                // [추가된 부분] 버튼 영역을 눌렀는지 먼저 확인
-                if (event.action == MotionEvent.ACTION_DOWN && pauseBtnRect.contains(
-                        event.x,
-                        event.y
-                    )
-                ) {
+                if (event.action == MotionEvent.ACTION_DOWN && pauseBtnRect.contains(event.x, event.y)) {
                     gameState = GameState.PAUSED
                     return true
                 }
@@ -759,14 +709,12 @@ class GameView @JvmOverloads constructor(
             GameState.PAUSED -> {
                 val x = event.x
                 val y = event.y
-                // 0: 재개, 1: 저장, 2: 나가기
                 for (i in menuRects.indices) {
                     if (menuRects[i].contains(x, y)) {
                         when (i) {
                             0 -> gameState = GameState.PLAYING
                             1 -> gameState = GameState.SAVE_SELECT
                             2 -> {
-                                // 액티비티 종료 (TitleActivity로 돌아감)
                                 (context as? android.app.Activity)?.finish()
                             }
                         }
@@ -783,23 +731,17 @@ class GameView @JvmOverloads constructor(
                     val pref = context.getSharedPreferences("VampireSave", Context.MODE_PRIVATE)
                     val gson = Gson()
 
-                    // 슬롯 1~5 선택
                     for (i in slotRects.indices) {
                         if (slotRects[i].contains(x, y)) {
-
-                            // 1. 저장된 데이터가 있는지, 있다면 주인(userId)이 누구인지 확인
                             val json = pref.getString("save_slot_$i", null)
                             var canSave = true
-
                             if (json != null) {
                                 try {
                                     val data = gson.fromJson(json, GameSaveData::class.java)
-                                    // 저장된 ID가 현재 로그인한 ID와 다르면 저장 불가
                                     if (data.userId != currentUserId) {
                                         canSave = false
                                     }
                                 } catch (e: Exception) {
-                                    // 데이터 깨짐 → 덮어쓰기 허용
                                 }
                             }
 
@@ -816,8 +758,6 @@ class GameView @JvmOverloads constructor(
                             return true
                         }
                     }
-
-                    // 취소 버튼
                     if (backBtnRect.contains(x, y)) {
                         gameState = GameState.PAUSED
                     }
@@ -825,17 +765,15 @@ class GameView @JvmOverloads constructor(
                 return true
             }
 
-            GameState.GAME_OVER -> {      // ← 正确独立分支
+            GameState.GAME_OVER -> {
                 if (event.action == MotionEvent.ACTION_DOWN) {
                     (context as? android.app.Activity)?.finish()
                 }
                 return true
             }
-
-
         }
+        return true
     }
-
 
     override fun performClick(): Boolean { super.performClick(); return true }
 
@@ -863,7 +801,7 @@ class GameView @JvmOverloads constructor(
         val option = currentLevelUpOptions[index]
         when (option.type) {
             OptionType.ADD_WEAPON -> {
-                val newWeapon = WeaponFactory.createWeapon(option.weaponType)
+                val newWeapon = WeaponFactory.createWeapon(context, option.weaponType)
                 weapons.add(newWeapon)
             }
             OptionType.UPGRADE_WEAPON -> {
@@ -882,8 +820,8 @@ class GameView @JvmOverloads constructor(
     }
 
     private fun chooseWeapon(type: String) {
-        val w = WeaponFactory.createWeapon(type)
-        val p = Player(w)
+        val w = WeaponFactory.createWeapon(context, type)
+        val p = Player(context, w)
         p.x = width / 2f
         p.y = height / 2f
 
@@ -899,13 +837,10 @@ class GameView @JvmOverloads constructor(
         weapons.clear()
         weapons.add(w)
 
-        // EnemyManager 초기화
         enemyManager.enemies.clear()
-
         expOrbs.clear()
         gameState = GameState.PLAYING
 
-        // 🚩 [이식] 게임 시작 시간 초기화 (HUD 타이머용)
         gameStartMs = System.currentTimeMillis()
         elapsedMs = 0L
     }
@@ -949,33 +884,27 @@ class GameView @JvmOverloads constructor(
         "talisman" -> "부적"
         else       -> type
     }
+
     override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hgt: Int) {}
+    override fun surfaceDestroyed(h: SurfaceHolder) { running = false }
 
-    override fun surfaceDestroyed(h: SurfaceHolder) {
-        running = false
-    }
-
-    // 置于类内部
     fun isGameOver(): Boolean = (gameState == GameState.GAME_OVER)
+}
 
-} // ← 注意这是 GameView 类的最终大括号
-
-
-// 저장할 데이터 구조체
 data class GameSaveData(
-    val userId: String = "guest", // [추가] 저장한 유저 ID
-    val saveDate: String = "",    // [추가] 저장 날짜 (yyyy-MM-dd HH:mm)
-    val elapsedMs: Long,         // 진행 시간
-    val playerHp: Float,         // 현재 체력
-    val playerMaxHp: Float,      // 최대 체력
-    val playerExp: Int,          // 현재 경험치
-    val playerLevel: Int,        // 플레이어 레벨
-    val playerX: Float,          // 위치 X
-    val playerY: Float,          // 위치 Y
-    val weapons: List<WeaponSaveInfo> // 무기 목록
+    val userId: String = "guest",
+    val saveDate: String = "",
+    val elapsedMs: Long,
+    val playerHp: Float,
+    val playerMaxHp: Float,
+    val playerExp: Int,
+    val playerLevel: Int,
+    val playerX: Float,
+    val playerY: Float,
+    val weapons: List<WeaponSaveInfo>
 )
 
 data class WeaponSaveInfo(
-    val type: String, // "sword", "axe" 등
-    val level: Int    // 무기 레벨
+    val type: String,
+    val level: Int
 )
