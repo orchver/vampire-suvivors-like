@@ -356,12 +356,14 @@ class GameView @JvmOverloads constructor(
                         p.gainExp(orb.value)
                         itO.remove()
                     }
-                    // 8. HP가 0이면 게임 오버 상태로 전환
-                    if (p.hp <= 0f) {
-                        gameState = GameState.GAME_OVER
-                    }
+
+                }
+                // 8. HP가 0이면 게임 오버 상태로 전환
+                if (p.hp <= 0f) {
+                    gameState = GameState.GAME_OVER
                 }
             }
+
             GameState.LEVEL_UP -> {}
             GameState.PAUSED -> {}
             GameState.SAVE_SELECT -> {}
@@ -626,7 +628,6 @@ class GameView @JvmOverloads constructor(
         val fontMetrics = textPaint.fontMetrics
         val baseline = pauseBtnRect.centerY() - (fontMetrics.descent + fontMetrics.ascent) / 2
         c.drawText("||", pauseBtnRect.centerX(), baseline, textPaint)
-        c.drawText("ENEMY: ${enemyManager.enemies.size}", 24f, hpTop + barHeight + 120f, hudTextPaint)
     }
 
     private inline fun <reified T : Weapon> getWeaponLevel(): Int {

@@ -13,7 +13,7 @@ import kotlin.math.sin
 class Sword(context: Context) : Weapon {
 
     override var level: Int = 0
-    override var baseDamage: Float = 25f
+    override var baseDamage: Float = 20f
     override var fireIntervalMs: Long = 0L
     override var piercing: Boolean = true
 
