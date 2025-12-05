@@ -434,7 +434,7 @@ class GameView @JvmOverloads constructor(
         // 반투명 검은 배경
         c.drawColor(Color.argb(150, 0, 0, 0))
 
-        val labels = listOf("게임 재개", "게임 저장", "타이틀로")
+        val labels = listOf("RESUME", "SAVE", "TITLE")
         val btnW = 400f
         val btnH = 100f
         val gap = 40f
@@ -493,7 +493,7 @@ class GameView @JvmOverloads constructor(
 
         val titlePaint =
             Paint().apply { color = Color.WHITE; textSize = 60f; textAlign = Paint.Align.CENTER }
-        c.drawText("슬롯 선택", width / 2f, 100f, titlePaint)
+        c.drawText("SAVE SLOT", width / 2f, 100f, titlePaint)
 
         val btnW = 700f
         val btnH = 120f
@@ -540,14 +540,14 @@ class GameView @JvmOverloads constructor(
                     c.drawText("데이터 오류", cx, cy + 10f, emptyTextPaint)
                 }
             } else {
-                c.drawText("슬롯 ${i + 1}", cx, cy + 15f, emptyTextPaint)
+                c.drawText("SLOT ${i + 1}", cx, cy + 15f, emptyTextPaint)
             }
         }
 
         backBtnRect.set(width / 2f - 100f, height - 150f, width / 2f + 100f, height - 50f)
         val backPaint = Paint().apply { color = Color.RED }
         c.drawRoundRect(backBtnRect, 20f, 20f, backPaint)
-        c.drawText("취소", backBtnRect.centerX(), backBtnRect.centerY() + 15f, mainTextPaint)
+        c.drawText("BACK", backBtnRect.centerX(), backBtnRect.centerY() + 15f, mainTextPaint)
     }
 
     private fun formatTime(ms: Long): String {
