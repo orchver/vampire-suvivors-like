@@ -21,9 +21,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.BasicTextField
 
 
 class LoginActivity : ComponentActivity() {
@@ -36,25 +41,25 @@ class LoginActivity : ComponentActivity() {
                 // 배경색 설정 (어두운 테마 느낌)
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF121212) // 짙은 검은색 배경
+                    color = Color(0xFF1E1E1E)
                 ) {
                     LoginScreen(
                         onLoginClick = { id, pw ->
                             if (dbHelper.login(id, pw)) {
-                                Toast.makeText(this, "로그인 성공", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "Login Success", Toast.LENGTH_SHORT).show()
                                 val intent = Intent(this, TitleActivity::class.java)
-                                intent.putExtra("USER_ID", id) // [추가] ID 전달
+                                intent.putExtra("USER_ID", id)
                                 startActivity(intent)
                                 finish()
                             } else {
-                                Toast.makeText(this, "로그인 실패: 아이디나 비번을 확인하세요", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "Login Failed, Check your ID/PW", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onSignUpClick = { id, pw ->
                             if (dbHelper.insertUser(id, pw)) {
-                                Toast.makeText(this, "회원가입 성공!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "Registration Success", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(this, "회원가입 실패: 이미 있는 아이디입니다.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "Registration Failed, ID already exitsts", Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
@@ -76,83 +81,69 @@ fun LoginScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp), // 화면 테두리 여백
-        horizontalAlignment = Alignment.CenterHorizontally, // 가로 중앙 정렬
-        verticalArrangement = Arrangement.Center // 세로 중앙 정렬
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         // 1. 게임 타이틀 (백귀야행)
         Image(
             painter = painterResource(id = R.drawable.title),
             contentDescription = "Main Title",
-            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth, // 가로를 꽉 채움
+            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
             modifier = Modifier
-                .fillMaxWidth(0.8f) // 화면 너비의 80%만큼 차지하게 설정 (너무 크면 0.6f 등으로 조절)
-                .aspectRatio(1f)    // 이미지 비율을 1:1(정사각형)로 고정하여 찌그러짐 방지
+                .fillMaxWidth(0.8f)
+                .aspectRatio(1f)
                 .padding(bottom = 16.dp)
         )
 
         // 2. 아이디 입력창
-        OutlinedTextField(
+        ImageTextField(
             value = id,
             onValueChange = { id = it },
-            label = { Text("아이디", color = Color.Gray) },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color.Red,
-                unfocusedBorderColor = Color.Gray,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
+            placeholder = "ID",
+            bgImage = R.drawable.login_window
         )
 
-        Spacer(modifier = Modifier.height(16.dp)) // 간격
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 3. 비밀번호 입력창
-        OutlinedTextField(
+        ImageTextField(
             value = pw,
             onValueChange = { pw = it },
-            label = { Text("비밀번호", color = Color.Gray) },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(), // 비밀번호 가리기
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color.Red,
-                unfocusedBorderColor = Color.Gray,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth()
+            placeholder = "PASSWORD",
+            bgImage = R.drawable.login_window,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
         )
 
-        Spacer(modifier = Modifier.height(32.dp)) // 버튼과 입력창 사이 간격
+        Spacer(modifier = Modifier.height(32.dp))
 
         // 4. 로그인 버튼
-        Button(
-            onClick = { onLoginClick(id, pw) },
+        Image(
+            painter = painterResource(id = R.drawable.login),
+            contentDescription = "로그인",
+            contentScale = ContentScale.FillWidth,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), // 붉은 버튼
-            shape = RoundedCornerShape(8.dp) // 모서리 둥글게
-        ) {
-            Text("로그인", fontSize = 18.sp, color = Color.White)
-        }
+                .fillMaxWidth(0.6f)
+                .height(50.dp)
+                .clickable { onLoginClick(id, pw) }
+        )
 
-        Spacer(modifier = Modifier.height(16.dp)) // 버튼 사이 간격
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 5. 회원가입 버튼
-        OutlinedButton(
-            onClick = { onSignUpClick(id, pw) },
+        Image(
+
+            painter = painterResource(id = R.drawable.register),
+            contentDescription = "회원가입",
+            contentScale = ContentScale.FillWidth,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text("회원가입", fontSize = 18.sp)
-        }
+                .fillMaxWidth(0.6f)
+                .height(50.dp)
+                .clickable {
+                    onSignUpClick(id, pw)
+                }
+        )
     }
 }
 
@@ -162,12 +153,64 @@ fun LoginScreenPreview() {
     MaterialTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFF121212) // 실제 화면과 똑같이 배경색 적용
+            color = Color(0xFF1E1E1E) // 실제 화면과 똑같이 배경색 적용
         ) {
             LoginScreen(
                 onLoginClick = { _, _ -> }, // 미리보기이므로 빈 동작 전달
                 onSignUpClick = { _, _ -> }
             )
         }
+    }
+}
+
+@Composable
+fun ImageTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    bgImage: Int,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    // 이미지와 텍스트 필드를 겹침
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp)
+    ) {
+        // 1. 배경 이미지
+        Image(
+            painter = painterResource(id = bgImage),
+            contentDescription = null,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 2. 실제 입력 필드
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            visualTransformation = visualTransformation,
+            keyboardOptions = keyboardOptions,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = Color.Gray, // 글자색 (배경에 맞춰 조절)
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            decorationBox = { innerTextField ->
+                // 패딩을 줘서 글자가 이미지 테두리에 딱 붙지 않게 함
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    // 입력값이 없을 때 보여줄 placeholder (회색 글씨)
+                    if (value.isEmpty()) {
+                        Text(text = placeholder, color = Color.Gray, fontSize = 18.sp)
+                    }
+                    innerTextField() // 실제 커서와 텍스트가 그려지는 곳
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 24.dp)
+        )
     }
 }

@@ -25,10 +25,10 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                // 전체 배경색을 짙은 검은색으로 통일
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF121212)
+                    color = Color(0xFF1E1E1E)
                 ) {
                     SettingsScreen()
                 }
@@ -39,21 +39,21 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     fun SettingsScreen() {
         Scaffold(
-            containerColor = Color(0xFF121212), // Scaffold 배경색도 통일
+            containerColor = Color(0xFF1E1E1E), // Scaffold 배경색도 통일
             topBar = {
                 TopAppBar(
-                    title = { Text("설정", color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text("SETTINGS", color = Color.White, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { finish() }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
-                                tint = Color.White // 아이콘 흰색
+                                tint = Color.White
                             )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF121212) // 앱바 배경색
+                        containerColor = Color(0xFF121212)
                     )
                 )
             }
@@ -62,15 +62,15 @@ class SettingsActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(24.dp), // 여백을 조금 더 넉넉하게
-                horizontalAlignment = Alignment.Start // 왼쪽 정렬
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.Start
             ) {
                 // 섹션 1: 사운드
                 Text(
-                    text = "사운드",
+                    text = "SOUND",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFD32F2F), // 붉은색 포인트
+                    color = Color(0xFFD32F2F),
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
@@ -78,27 +78,6 @@ class SettingsActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                /*
-                // 구분선
-                HorizontalDivider(thickness = 1.dp, color = Color.DarkGray)
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // 섹션 2: 그래픽 (예시)
-                Text(
-                    text = "그래픽",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFD32F2F), // 붉은색 포인트
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                Text(
-                    text = "준비 중입니다...",
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
-                 */
             }
         }
     }
@@ -141,9 +120,9 @@ class SettingsActivity : ComponentActivity() {
                         valueRange = 0f..maxVolume.toFloat(),
                         steps = if (maxVolume > 1) maxVolume - 1 else 0,
                         colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFFD32F2F),       // 붉은색 핸들
-                            activeTrackColor = Color(0xFFD32F2F), // 붉은색 채워진 트랙
-                            inactiveTrackColor = Color.DarkGray   // 회색 빈 트랙
+                            thumbColor = Color(0xFFD32F2F),
+                            activeTrackColor = Color(0xFFD32F2F),
+                            inactiveTrackColor = Color.DarkGray
                         )
                     )
                 }
@@ -155,7 +134,7 @@ class SettingsActivity : ComponentActivity() {
                     text = "${(currentVolume.toFloat() / maxVolume * 100).toInt()}%",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(40.dp) // 너비 고정해서 숫자 바뀔 때 흔들림 방지
+                    modifier = Modifier.width(40.dp)
                 )
             }
         }
@@ -165,7 +144,7 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     fun SettingsScreenPreview() {
         MaterialTheme {
-            Surface(color = Color(0xFF121212)) {
+            Surface(color = Color(0xFF1E1E1E)) {
                 SettingsScreen()
             }
         }

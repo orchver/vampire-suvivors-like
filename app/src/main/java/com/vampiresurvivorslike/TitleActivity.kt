@@ -20,6 +20,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vampiresurvivorslike.SettingsActivity
+import androidx.compose.foundation.clickable
 
 class TitleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,7 +33,7 @@ class TitleActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF121212) // 로그인 화면과 동일한 짙은 검은색 배경
+                    color = Color(0xFF1E1E1E)
                 ) {
                     TitleScreen(userId = userId)
                 }
@@ -60,56 +61,48 @@ fun TitleScreen(userId: String) {
             modifier = Modifier
                 .fillMaxWidth(0.8f)
                 .aspectRatio(1f)
-                .padding(bottom = 32.dp) // 버튼과 간격 띄우기
+                .padding(bottom = 32.dp)
         )
 
+        val buttonData = listOf(
+            Triple("새로운 게임", R.drawable.start, 0.4f),
+            Triple("저장된 게임", R.drawable.load, 0.4f),
+            Triple("설정", R.drawable.settings, 0.6f), // 예: 설정은 좀 작게
+            Triple("나가기", R.drawable.exit, 0.4f)    // 예: 나가기는 더 작게
+        )
 
-
-        // 버튼 텍스트 목록
-        val buttonLabels = listOf("새로운 게임", "저장된 게임", "설정", "나가기")
-
-        // 각 텍스트에 대해 스타일이 적용된 버튼 생성
-        buttonLabels.forEach { label ->
-            val isPrimary = label == "새로운 게임" // "새로운 게임"만 빨간색 강조
-
-            Button(
-                onClick = {
-                    when (label) {
-                        "새로운 게임" -> {
-                            Toast.makeText(context, "새로운 게임을 시작합니다.", Toast.LENGTH_SHORT).show()
-                            val intent = Intent(context, MainActivity::class.java)
-                            intent.putExtra("loadSaved", false)
-                            intent.putExtra("USER_ID", userId)
-                            context.startActivity(intent)
-                        }
-                        "저장된 게임" -> {
-                            val intent = Intent(context, LoadGameActivity::class.java)
-                            intent.putExtra("USER_ID", userId)
-                            context.startActivity(intent)
-                        }
-                        "설정" -> {
-                            val intent = Intent(context, SettingsActivity::class.java)
-                            context.startActivity(intent)
-                        }
-                        "나가기" -> {
-                            (context as? ComponentActivity)?.finish()
+        // 3. 리스트를 순회하며 이미지 버튼 생성
+        buttonData.forEach { (label, imageRes, widthRatio) ->
+            Image(
+                painter = painterResource(id = imageRes),
+                contentDescription = label,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth(widthRatio)
+                    .clickable {
+                        when (label) {
+                            "새로운 게임" -> {
+                                Toast.makeText(context, "START NEW GAME", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(context, MainActivity::class.java)
+                                intent.putExtra("loadSaved", false)
+                                intent.putExtra("USER_ID", userId)
+                                context.startActivity(intent)
+                            }
+                            "저장된 게임" -> {
+                                val intent = Intent(context, LoadGameActivity::class.java)
+                                intent.putExtra("USER_ID", userId)
+                                context.startActivity(intent)
+                            }
+                            "설정" -> {
+                                val intent = Intent(context, SettingsActivity::class.java)
+                                context.startActivity(intent)
+                            }
+                            "나가기" -> {
+                                (context as? ComponentActivity)?.finish()
+                            }
                         }
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = if (isPrimary) {
-                    ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)) // 붉은색
-                } else {
-                    ButtonDefaults.buttonColors(containerColor = Color.DarkGray) // 나머지는 어두운 회색
-                    // 혹은 테두리만 있는 스타일 -> 아래 주석 해제
-                    // ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                },
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(text = label, fontSize = 18.sp, color = Color.White)
-            }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -122,7 +115,7 @@ fun TitleScreenPreview() {
     MaterialTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFF121212)
+            color = Color(0xFF1E1E1E)
         ) {
             TitleScreen(userId = "Player1")
         }

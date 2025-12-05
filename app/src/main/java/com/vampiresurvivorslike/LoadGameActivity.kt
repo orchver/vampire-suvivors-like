@@ -38,7 +38,7 @@ class LoadGameActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF121212) // 어두운 배경
+                    color = Color(0xFF1E1E1E) // 어두운 배경
                 ) {
                     LoadGameScreen(currentUserId) { slotIndex ->
                         // 슬롯 선택 시 MainActivity로 이동하며 게임 시작
@@ -65,7 +65,7 @@ fun LoadGameScreen(currentUserId: String, onSlotSelected: (Int) -> Unit) {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("저장된 게임 불러오기", color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(vertical = 20.dp))
+        Text("GAME LOAD", color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(vertical = 20.dp))
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -74,7 +74,7 @@ fun LoadGameScreen(currentUserId: String, onSlotSelected: (Int) -> Unit) {
             items(5) { index ->
                 // 저장 데이터 읽기
                 val json = pref.getString("save_slot_$index", null)
-                var slotText = "슬롯 ${index + 1} (빈 슬롯)"
+                var slotText = "SLOT ${index + 1} (EMPTY SLOT)"
                 var subText = ""
                 var isMyData = true
                 var isClickable = false
@@ -83,16 +83,16 @@ fun LoadGameScreen(currentUserId: String, onSlotSelected: (Int) -> Unit) {
                     try {
                         val data = gson.fromJson(json, GameSaveData::class.java)
                         if (data.userId == currentUserId) {
-                            slotText = "슬롯 ${index + 1} [Lv.${data.playerLevel}]"
+                            slotText = "SLOT ${index + 1} [Lv.${data.playerLevel}]"
                             subText = "${data.saveDate} | ${formatTimeCompose(data.elapsedMs)}"
                             isClickable = true
                         } else {
-                            slotText = "슬롯 ${index + 1} (다른 유저: ${data.userId})"
-                            subText = "불러올 수 없습니다"
+                            slotText = "SLOT ${index + 1} (Other User: ${data.userId})"
+                            subText = "Cannot be loaded"
                             isMyData = false
                         }
                     } catch (e: Exception) {
-                        slotText = "데이터 오류"
+                        slotText = "Data error"
                     }
                 }
 
@@ -129,7 +129,7 @@ fun LoadGameScreen(currentUserId: String, onSlotSelected: (Int) -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(50.dp)
         ) {
-            Text("취소")
+            Text("BACK")
         }
     }
 }
