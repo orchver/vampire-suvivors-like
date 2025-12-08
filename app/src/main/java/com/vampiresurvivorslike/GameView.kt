@@ -74,7 +74,7 @@ class GameView @JvmOverloads constructor(
             post {
                 android.widget.Toast.makeText(
                     context,
-                    "${slotIndex + 1}번 슬롯에 저장됨!",
+                    "Saved in slot ${slotIndex + 1}",
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
