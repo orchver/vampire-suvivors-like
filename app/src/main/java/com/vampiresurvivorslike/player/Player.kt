@@ -97,7 +97,7 @@ class Player(context: Context, var weapon: Weapon) {
         while (exp >= expToNext) {
             exp -= expToNext
             level += 1
-            expToNext *= 2
+            expToNext += 340
             maxHp += 25f
             val missing = maxHp - hp
             val healInt = (missing * 0.75f).toInt()

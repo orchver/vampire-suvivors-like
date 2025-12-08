@@ -326,14 +326,14 @@ class GameView @JvmOverloads constructor(
                 while (itE.hasNext()) {
                     val e = itE.next()
                     if (!e.isAlive) {
-                        expOrbs += ExpOrb(e.x, e.y, 10)
+                        expOrbs += ExpOrb(e.x, e.y, 20)
                         itE.remove()
                     }
                 }
 
                 // 6. 🚩 [이식] 강력한 자석 효과
-                val magnetRadius = 3000f
-                val magnetSpeed = 500f
+                val magnetRadius = 250f
+                val magnetSpeed = 700f
 
                 for (orb in expOrbs) {
                     val dx = p.x - orb.x
@@ -556,6 +556,7 @@ class GameView @JvmOverloads constructor(
     }
 
     private fun drawHUD(c: Canvas) {
+        val topOffset = 80f
         val p = player ?: return
 
         val secTotal = (elapsedMs / 1000).toInt()

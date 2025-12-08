@@ -12,7 +12,7 @@ class EnemyManager(private val context: Context) {
     val enemies = mutableListOf<EnemyBase>()
 
     private var spawnTimer = 0f
-    private val SPAWN_INTERVAL = 1.0f
+    private val SPAWN_INTERVAL = 0.5f
     private val SPAWN_RADIUS = 1200f
 
     var boss: BossEnemy? = null

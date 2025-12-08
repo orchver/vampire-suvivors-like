@@ -15,7 +15,7 @@ import kotlin.random.Random
 class Bow(context: Context) : Weapon {
 
     override var level: Int = 0
-    override var baseDamage: Float = 10f
+    override var baseDamage: Float = 1f
     override var fireIntervalMs: Long = 1000L
     override var piercing: Boolean = true
 
@@ -117,9 +117,9 @@ class Bow(context: Context) : Weapon {
 
     override fun upgrade() {
         when (level) {
-            0 -> { level = 1; projectileCount = 5; fireIntervalMs = 750L; critChance = 0.35f; critMultiplier = 4.5f }
-            1 -> { level = 2; projectileCount = 9; fireIntervalMs = 500L; critChance = 0.60f; critMultiplier = 7.0f }
-            else -> { level = 3; projectileCount = 15; fireIntervalMs = 250L; critChance = 1.0f; critMultiplier = 9.0f }
+            0 -> { level = 1; projectileCount = 5; fireIntervalMs = 750L; critChance = 0.1f; critMultiplier = 3f }
+            1 -> { level = 2; projectileCount = 9; fireIntervalMs = 500L; critChance = 0.2f; critMultiplier = 7.0f }
+            else -> { level = 3; projectileCount = 15; fireIntervalMs = 250L; critChance = 0.3f; critMultiplier = 15.0f }
         }
     }
 }

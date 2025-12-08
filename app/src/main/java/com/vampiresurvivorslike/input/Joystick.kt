@@ -9,8 +9,8 @@ import kotlin.math.hypot
 import kotlin.math.min
 
 class Joystick(
-    private val baseRadius: Float = 140f,   // 조이스틱 바닥 반지름 (기존보다 큼)
-    private val knobRadius: Float = 60f     // 손잡이 반지름 (기존보다 큼)
+    private val baseRadius: Float = 160f,   // 조이스틱 바닥 반지름 (기존보다 큼)
+    private val knobRadius: Float = 80f     // 손잡이 반지름 (기존보다 큼)
 ) {
     private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(120, 255, 255, 255) }
     private val knobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(220, 0, 255, 255) }
@@ -31,8 +31,9 @@ class Joystick(
 
     /** 왼쪽 하단에 고정 위치 설정 */
     fun ensureBase(defaultW: Int, defaultH: Int) {
-        baseX = defaultW - (baseRadius + 60f)
-        baseY = defaultH - (baseRadius + 60f)
+        baseX = defaultW * 0.82f   // 数字越小 → 越靠左（比如 0.78f）
+        baseY = defaultH * 0.80f   // 数字越小 → 越靠上（比如 0.75f）
+
         knobX = baseX
         knobY = baseY
         axisX = 0f

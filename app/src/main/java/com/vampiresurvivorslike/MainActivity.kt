@@ -10,6 +10,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        supportActionBar?.hide()
+
         // 로그인/타이틀 화면에서 넘어온 유저 ID 받기
         val userId = intent.getStringExtra("USER_ID") ?: "guest"
         val shouldLoad = intent.getBooleanExtra("loadSaved", false)
