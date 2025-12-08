@@ -78,72 +78,89 @@ fun LoginScreen(
     var id by remember { mutableStateOf("") }
     var pw by remember { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        // 1. 게임 타이틀 (백귀야행)
         Image(
-            painter = painterResource(id = R.drawable.title),
-            contentDescription = "Main Title",
-            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+            painter = painterResource(id = R.drawable.title_bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .aspectRatio(1f)
-                .padding(bottom = 16.dp)
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = 0.3f)) // 60% 어둡게
         )
 
-        // 2. 아이디 입력창
-        ImageTextField(
-            value = id,
-            onValueChange = { id = it },
-            placeholder = "ID",
-            bgImage = R.drawable.login_window
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 3. 비밀번호 입력창
-        ImageTextField(
-            value = pw,
-            onValueChange = { pw = it },
-            placeholder = "PASSWORD",
-            bgImage = R.drawable.login_window,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // 4. 로그인 버튼
-        Image(
-            painter = painterResource(id = R.drawable.login),
-            contentDescription = "로그인",
-            contentScale = ContentScale.FillWidth,
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.6f)
-                .height(50.dp)
-                .clickable { onLoginClick(id, pw) }
-        )
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 1. 게임 타이틀 (백귀야행)
+            Image(
+                painter = painterResource(id = R.drawable.title),
+                contentDescription = "Main Title",
+                contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .aspectRatio(1f)
+                    .padding(bottom = 16.dp)
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            // 2. 아이디 입력창
+            ImageTextField(
+                value = id,
+                onValueChange = { id = it },
+                placeholder = "ID",
+                bgImage = R.drawable.login_window
+            )
 
-        // 5. 회원가입 버튼
-        Image(
+            Spacer(modifier = Modifier.height(16.dp))
 
-            painter = painterResource(id = R.drawable.register),
-            contentDescription = "회원가입",
-            contentScale = ContentScale.FillWidth,
-            modifier = Modifier
-                .fillMaxWidth(0.6f)
-                .height(50.dp)
-                .clickable {
-                    onSignUpClick(id, pw)
-                }
-        )
+            // 3. 비밀번호 입력창
+            ImageTextField(
+                value = pw,
+                onValueChange = { pw = it },
+                placeholder = "PASSWORD",
+                bgImage = R.drawable.login_window,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // 4. 로그인 버튼
+            Image(
+                painter = painterResource(id = R.drawable.login),
+                contentDescription = "로그인",
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(50.dp)
+                    .clickable { onLoginClick(id, pw) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. 회원가입 버튼
+            Image(
+
+                painter = painterResource(id = R.drawable.register),
+                contentDescription = "회원가입",
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(50.dp)
+                    .clickable {
+                        onSignUpClick(id, pw)
+                    }
+            )
+        }
     }
 }
 
@@ -156,7 +173,7 @@ fun LoginScreenPreview() {
             color = Color(0xFF1E1E1E) // 실제 화면과 똑같이 배경색 적용
         ) {
             LoginScreen(
-                onLoginClick = { _, _ -> }, // 미리보기이므로 빈 동작 전달
+                onLoginClick = { _, _ -> }, // 미리보기이므로 빈 동작
                 onSignUpClick = { _, _ -> }
             )
         }
@@ -179,7 +196,6 @@ fun ImageTextField(
             .fillMaxWidth()
             .height(60.dp)
     ) {
-        // 1. 배경 이미지
         Image(
             painter = painterResource(id = bgImage),
             contentDescription = null,
@@ -187,7 +203,6 @@ fun ImageTextField(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. 실제 입력 필드
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -195,18 +210,16 @@ fun ImageTextField(
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             textStyle = androidx.compose.ui.text.TextStyle(
-                color = Color.Gray, // 글자색 (배경에 맞춰 조절)
+                color = Color.Black, // 글자색
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             ),
             decorationBox = { innerTextField ->
-                // 패딩을 줘서 글자가 이미지 테두리에 딱 붙지 않게 함
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    // 입력값이 없을 때 보여줄 placeholder (회색 글씨)
                     if (value.isEmpty()) {
-                        Text(text = placeholder, color = Color.Gray, fontSize = 18.sp)
+                        Text(text = placeholder, color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
-                    innerTextField() // 실제 커서와 텍스트가 그려지는 곳
+                    innerTextField() // 실제 커서와 텍스트
                 }
             },
             modifier = Modifier.fillMaxWidth()

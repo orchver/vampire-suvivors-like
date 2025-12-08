@@ -18,6 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 class SettingsActivity : ComponentActivity() {
@@ -38,46 +42,60 @@ class SettingsActivity : ComponentActivity() {
 
     @Composable
     fun SettingsScreen() {
-        Scaffold(
-            containerColor = Color(0xFF1E1E1E), // Scaffold 배경색도 통일
-            topBar = {
-                TopAppBar(
-                    title = { Text("SETTINGS", color = Color.White, fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { finish() }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF121212)
-                    )
-                )
-            }
-        ) { innerPadding ->
-            Column(
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(id = R.drawable.title_bg), // 배경 이미지 리소스 (준비 필요)
+                contentDescription = null,
+                contentScale = ContentScale.Crop, // 화면 꽉 채우기
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.Start
-            ) {
-                // 섹션 1: 사운드
-                Text(
-                    text = "SOUND",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFD32F2F),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                    .background(Color.White.copy(alpha = 0.3f))
+            )
+            Scaffold(
+                containerColor = Color.Transparent, // Scaffold 배경색도 통일
+                topBar = {
+                    TopAppBar(
+                        title = { Text("SETTINGS", color = Color.White, fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = { finish() }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color(0x80121212)
+                        )
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    // 섹션 1: 사운드
+                    Text(
+                        text = "SOUND",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD32F2F),
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
 
-                VolumeControl()
+                    VolumeControl()
 
-                Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
 
+                }
             }
         }
     }

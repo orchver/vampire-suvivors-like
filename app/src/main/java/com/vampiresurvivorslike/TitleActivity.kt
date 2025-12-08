@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -46,66 +47,87 @@ class TitleActivity : ComponentActivity() {
 fun TitleScreen(userId: String) {
     val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        // 1. 게임 타이틀 이미지 (로그인 화면과 동일)
         Image(
-            painter = painterResource(id = R.drawable.title),
-            contentDescription = "Main Title",
-            contentScale = ContentScale.FillWidth,
+            painter = painterResource(id = R.drawable.title_bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .aspectRatio(1f)
-                .padding(bottom = 32.dp)
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = 0.3f))
         )
 
-        val buttonData = listOf(
-            Triple("새로운 게임", R.drawable.start, 0.4f),
-            Triple("저장된 게임", R.drawable.load, 0.4f),
-            Triple("설정", R.drawable.settings, 0.6f), // 예: 설정은 좀 작게
-            Triple("나가기", R.drawable.exit, 0.4f)    // 예: 나가기는 더 작게
-        )
-
-        // 3. 리스트를 순회하며 이미지 버튼 생성
-        buttonData.forEach { (label, imageRes, widthRatio) ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 1. 게임 타이틀 이미지 (로그인 화면과 동일)
             Image(
-                painter = painterResource(id = imageRes),
-                contentDescription = label,
+                painter = painterResource(id = R.drawable.title),
+                contentDescription = "Main Title",
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
-                    .fillMaxWidth(widthRatio)
-                    .clickable {
-                        when (label) {
-                            "새로운 게임" -> {
-                                Toast.makeText(context, "START NEW GAME", Toast.LENGTH_SHORT).show()
-                                val intent = Intent(context, MainActivity::class.java)
-                                intent.putExtra("loadSaved", false)
-                                intent.putExtra("USER_ID", userId)
-                                context.startActivity(intent)
-                            }
-                            "저장된 게임" -> {
-                                val intent = Intent(context, LoadGameActivity::class.java)
-                                intent.putExtra("USER_ID", userId)
-                                context.startActivity(intent)
-                            }
-                            "설정" -> {
-                                val intent = Intent(context, SettingsActivity::class.java)
-                                context.startActivity(intent)
-                            }
-                            "나가기" -> {
-                                (context as? ComponentActivity)?.finish()
-                            }
-                        }
-                    }
+                    .fillMaxWidth(0.8f)
+                    .aspectRatio(1f)
+                    .padding(bottom = 32.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            val buttonData = listOf(
+                Triple("새로운 게임", R.drawable.start, 0.4f),
+                Triple("저장된 게임", R.drawable.load, 0.4f),
+                Triple("설정", R.drawable.settings, 0.6f), // 예: 설정은 좀 작게
+                Triple("나가기", R.drawable.exit, 0.4f)    // 예: 나가기는 더 작게
+            )
+
+            // 3. 리스트를 순회하며 이미지 버튼 생성
+            buttonData.forEach { (label, imageRes, widthRatio) ->
+                Image(
+                    painter = painterResource(id = imageRes),
+                    contentDescription = label,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .fillMaxWidth(widthRatio)
+                        .clickable {
+                            when (label) {
+                                "새로운 게임" -> {
+                                    Toast.makeText(context, "START NEW GAME", Toast.LENGTH_SHORT).show()
+                                    val intent = Intent(context, MainActivity::class.java)
+                                    intent.putExtra("loadSaved", false)
+                                    intent.putExtra("USER_ID", userId)
+                                    context.startActivity(intent)
+                                }
+
+                                "저장된 게임" -> {
+                                    val intent = Intent(context, LoadGameActivity::class.java)
+                                    intent.putExtra("USER_ID", userId)
+                                    context.startActivity(intent)
+                                }
+
+                                "설정" -> {
+                                    val intent = Intent(context, SettingsActivity::class.java)
+                                    context.startActivity(intent)
+                                }
+
+                                "나가기" -> {
+                                    (context as? ComponentActivity)?.finish()
+                                }
+                            }
+                        }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
+
     }
 }
 
