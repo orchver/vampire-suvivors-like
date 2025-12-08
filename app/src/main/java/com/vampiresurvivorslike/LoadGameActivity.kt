@@ -182,12 +182,9 @@ fun LoadGameScreenPreview() {
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFF1E1E1E)
         ) {
-            // 미리보기용 더미 데이터 설정이 필요할 수 있지만,
-            // SharedPreference는 프리뷰에서 동작하지 않으므로
-            // 기본적으로 "EMPTY SLOT"들이 보이거나 예외 처리가 된 화면이 뜹니다.
             LoadGameScreen(
                 currentUserId = "Player1",
-                onSlotSelected = { /* 클릭해도 아무 동작 안 함 */ }
+                onSlotSelected = { }
             )
         }
     }

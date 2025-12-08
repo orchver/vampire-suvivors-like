@@ -38,7 +38,7 @@ class LoginActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                // 배경색 설정 (어두운 테마 느낌)
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color(0xFF1E1E1E)
@@ -91,7 +91,7 @@ fun LoginScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White.copy(alpha = 0.3f)) // 60% 어둡게
+                .background(Color.White.copy(alpha = 0.3f))
         )
 
         Column(
@@ -170,10 +170,10 @@ fun LoginScreenPreview() {
     MaterialTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFF1E1E1E) // 실제 화면과 똑같이 배경색 적용
+            color = Color(0xFF1E1E1E)
         ) {
             LoginScreen(
-                onLoginClick = { _, _ -> }, // 미리보기이므로 빈 동작
+                onLoginClick = { _, _ -> },
                 onSignUpClick = { _, _ -> }
             )
         }

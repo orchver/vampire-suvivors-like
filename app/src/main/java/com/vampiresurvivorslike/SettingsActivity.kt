@@ -45,9 +45,9 @@ class SettingsActivity : ComponentActivity() {
 
         Box(modifier = Modifier.fillMaxSize()) {
             Image(
-                painter = painterResource(id = R.drawable.title_bg), // 배경 이미지 리소스 (준비 필요)
+                painter = painterResource(id = R.drawable.title_bg),
                 contentDescription = null,
-                contentScale = ContentScale.Crop, // 화면 꽉 채우기
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
             Box(
@@ -56,7 +56,7 @@ class SettingsActivity : ComponentActivity() {
                     .background(Color.White.copy(alpha = 0.3f))
             )
             Scaffold(
-                containerColor = Color.Transparent, // Scaffold 배경색도 통일
+                containerColor = Color.Transparent,
                 topBar = {
                     TopAppBar(
                         title = { Text("SETTINGS", color = Color.White, fontWeight = FontWeight.Bold) },
@@ -82,7 +82,7 @@ class SettingsActivity : ComponentActivity() {
                         .padding(24.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    // 섹션 1: 사운드
+                    // 사운드
                     Text(
                         text = "SOUND",
                         fontSize = 18.sp,

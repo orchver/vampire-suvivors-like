@@ -84,8 +84,8 @@ fun TitleScreen(userId: String) {
             val buttonData = listOf(
                 Triple("새로운 게임", R.drawable.start, 0.4f),
                 Triple("저장된 게임", R.drawable.load, 0.4f),
-                Triple("설정", R.drawable.settings, 0.6f), // 예: 설정은 좀 작게
-                Triple("나가기", R.drawable.exit, 0.4f)    // 예: 나가기는 더 작게
+                Triple("설정", R.drawable.settings, 0.6f),
+                Triple("나가기", R.drawable.exit, 0.4f)
             )
 
             // 3. 리스트를 순회하며 이미지 버튼 생성
